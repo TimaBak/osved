@@ -96,6 +96,8 @@ def collect_due_sources(
                     )
                 )
             inserted = rejected = ingest_limit = 0
+            skipped_before_follow = 0
+            rejection_reasons: dict[str, int] = {}
             if batch.status in {"ok", "partial", "empty"}:
                 ingest_limit = (
                     100
@@ -112,6 +114,7 @@ def collect_due_sources(
                             or datetime.fromisoformat(item.published_at.replace("Z", "+00:00"))
                             < datetime.fromisoformat(str(not_before))
                         ):
+                            skipped_before_follow += 1
                             continue  # No archive flood when a channel is first followed.
                         inserted += int(
                             ingest_item(
@@ -124,8 +127,17 @@ def collect_due_sources(
                                 else source.calibration_lookback_days,
                             )
                         )
-                    except (ValueError, TypeError, OverflowError):
+                    except (ValueError, TypeError, OverflowError) as exc:
                         rejected += 1
+                        reason = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+                        # Only fixed categories, not arbitrary exception text or source content.
+                        category = (
+                            "stale" if reason == "Outside source freshness window" else
+                            "future" if reason == "Publication time is in the future" else
+                            "invalid_content" if reason == "Missing stable identity or content" else
+                            "invalid_item"
+                        )
+                        rejection_reasons[category] = rejection_reasons.get(category, 0) + 1
             status = batch.status
             if rejected:
                 status = "partial" if inserted or rejected < len(batch.items) else "filtered"
@@ -167,6 +179,8 @@ def collect_due_sources(
                     "seen": len(batch.items),
                     "inserted": inserted,
                     "rejected": rejected,
+                    "rejection_reasons": rejection_reasons,
+                    "skipped_before_follow": skipped_before_follow,
                     "cost_usd": batch.cost_usd,
                     "error": redact_text(batch.error or "")[:400],
                 }
