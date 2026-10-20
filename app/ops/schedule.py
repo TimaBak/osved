@@ -385,7 +385,7 @@ class ScheduledJobExecutor:
             "errors": total_errors,
         }
 
-    def research(self) -> dict[str, Any]:
+    def research(self, *, max_attempts: int | None = None) -> dict[str, Any]:
         target = self.settings.scheduled_news_per_batch
         owner_id = configured_owner_id(self.settings, self.repository)
         ready = (
@@ -416,7 +416,7 @@ class ScheduledJobExecutor:
             rank_event_candidates(
                 [event for event in candidates if is_web_discovery(event) == from_search],
                 recent_events=recent,
-                limit=self.settings.scheduled_research_max_attempts,
+                limit=max_attempts if max_attempts is not None else self.settings.scheduled_research_max_attempts,
                 now=self.current_time(),
             )
             for from_search in (True, False)
@@ -429,7 +429,7 @@ class ScheduledJobExecutor:
             for i in range(max(map(len, pools)))
             for pool in pools
             for event in pool[i : i + 1]
-        ][: self.settings.scheduled_research_max_attempts]
+        ][: max_attempts if max_attempts is not None else self.settings.scheduled_research_max_attempts]
         if not events:
             return {"events_seen": 0, "cards_created": 0, "cost_usd": 0.0, "errors": 0}
         outcomes: list[dict[str, Any]] = []
