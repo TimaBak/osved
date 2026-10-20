@@ -209,7 +209,9 @@ class VideoReportService:
             if self.settings.codex_sale_api_key and self.transport is model_transport:
                 from app.llm.codexsale import CodexSaleClient
 
-                payload = {**request, "model": self.settings.codex_sale_model}
+                from app.llm.model_registry import selected_model
+
+                payload = {**request, "model": selected_model(self.repository, "video")}
                 response = CodexSaleClient(key.get_secret_value(), timeout=300).chat(
                     model=payload.pop("model"), messages=payload.pop("messages"), **payload
                 )
@@ -384,7 +386,9 @@ class VideoReportService:
                 (directory / "report.md").write_text(rendered, encoding="utf-8")
                 pdf = directory / "report.pdf"
                 report_progress(progress, "pdf")
-                audit = create_pdf(pdf, original, source)
+                audit = create_pdf(
+                    pdf, original, source, model=str(response.get("model") or MODEL)
+                )
                 assert (directory / "original.md").read_text() == original
                 audit.update(
                     input_sha256=source["input_sha256"],
