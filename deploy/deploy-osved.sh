@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Intended for an isolated VPS and a dedicated self-hosted runner labeled osved-deploy.
-# One-time provision: install Docker/Compose, runner, and /opt/osved/.env (chmod 600).
-DEST="${OSVED_DEPLOY_DIR:-/opt/osved}"
-if [[ "$DEST" != "/opt/osved" ]]; then
-  echo "Unexpected deploy destination" >&2
-  exit 1
-fi
-if [[ ! -f "$DEST/.env" ]]; then
-  echo "Missing $DEST/.env. Provision secrets directly on VPS first." >&2
-  exit 1
-fi
-command -v rsync >/dev/null || { echo "rsync required" >&2; exit 1; }
+# This is a manually approved, one-time staging bootstrap. Never invoke from
+# a self-hosted runner job or grant osved-runner permissions to execute it.
+[[ $(id -u) -eq 0 ]] || { echo "Run as root" >&2; exit 1; }
+[[ ${1:-} == /opt/osved/staging-source ]] || { echo "Expected source: /opt/osved/staging-source" >&2; exit 1; }
+SOURCE=/opt/osved/staging-source
+DEST=/opt/osved/app
+[[ -f "$SOURCE/compose.yaml" && -f "$SOURCE/Dockerfile" ]] || { echo "Missing project sources" >&2; exit 1; }
+[[ -f "$DEST/.env" ]] || { echo "Missing protected application environment" >&2; exit 1; }
+command -v rsync >/dev/null
 docker compose version >/dev/null
-mkdir -p "$DEST"
-# Preserve deployment secrets and data; SQLite lives in a named Docker volume.
-rsync -a --delete --exclude='.git/' --exclude='.env' --exclude='data/' --exclude='exports/' ./ "$DEST/"
+# Do not delete secrets, persistent data, or arbitrary files in target.
+rsync -a --exclude='.git/' --exclude='.env' --exclude='secrets/' --exclude='data/' --exclude='exports/' "$SOURCE/" "$DEST/"
 cd "$DEST"
 docker compose config --quiet
 docker compose build newsfeed
