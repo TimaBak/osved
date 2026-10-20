@@ -77,7 +77,7 @@ class NativeAdapter:
             payload = fetch_feed(source)
             try:
                 if UNSAFE_XML_RE.search(payload):
-                    raise RSSCollectorError("RSS contains a DTD or entity declaration (blocked for XML safety)")
+                    raise RSSCollectorError("RSS contains blocked DTD or entity declaration")
                 root = ElementTree.fromstring(payload)
                 if local_name(root.tag) not in {"rss", "feed", "RDF"}:
                     raise RSSCollectorError("Expected RSS/Atom, received another document")
