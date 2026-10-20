@@ -36,5 +36,6 @@ def test_rejects_non_codex_origin():
 
 def test_models_parse_response():
     client = CodexSaleClient("test-secret")
-    with patch.object(CodexSaleClient, "_request", return_value={"data": [{"id": "gpt-6-luna"}, {"oops": 1}]}):
+    mock_data = {"data": [{"id": "gpt-6-luna"}, {"oops": 1}]}
+    with patch.object(CodexSaleClient, "_request", return_value=mock_data):
         assert client.models() == [{"id": "gpt-6-luna"}]
