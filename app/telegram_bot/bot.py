@@ -229,6 +229,67 @@ def build_router(settings: Settings, repository: Repository) -> Router:
     register_channel_handlers(router, settings, repository)
     register_video_report_handlers(router, settings, repository)
 
+    def home_screen() -> tuple[str, InlineKeyboardMarkup]:
+        from aiogram.types import InlineKeyboardButton
+
+        buttons = [
+            [InlineKeyboardButton(text="📰 Новости", callback_data="osved_nav:news"),
+             InlineKeyboardButton(text="🧬 Биографии", callback_data="osved_nav:bio")],
+            [InlineKeyboardButton(text="🔎 Поиск и исследования", callback_data="osved_nav:research")],
+            [InlineKeyboardButton(text="🎬 Видео и PDF", callback_data="osved_nav:video")],
+            [InlineKeyboardButton(text="⚙️ Модели и провайдеры", callback_data="osved_nav:models")],
+            [InlineKeyboardButton(text="📊 Статус", callback_data="osved_nav:status"),
+             InlineKeyboardButton(text="❔ Помощь", callback_data="osved_nav:help")],
+        ]
+        return (
+            "<b>ОСВЕД · Главная</b>\n\n"
+            "Личный центр новостей, анализа и видео. Выбирай раздел кнопками.",
+            InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+
+    def nav_back() -> InlineKeyboardMarkup:
+        from aiogram.types import InlineKeyboardButton
+
+        return InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")
+        ]])
+
+    @router.callback_query(
+        lambda query: bool(query.data and query.data.startswith("osved_nav:"))
+    )
+    async def navigation_callback(query: CallbackQuery) -> None:
+        if not is_allowed(settings, repository, query.from_user.id):
+            await query.answer("Нет доступа", show_alert=True)
+            return
+        if query.message is None:
+            await query.answer()
+            return
+        page = (query.data or "").removeprefix("osved_nav:")
+        if page == "models":
+            from app.telegram_bot.model_menu import overview_keyboard, overview_text
+            text, keyboard = overview_text(repository), overview_keyboard(repository)
+        elif page == "home":
+            text, keyboard = home_screen()
+        else:
+            pages = {
+                "news": "<b>📰 Новости</b>\n\nПолучить следующую новость: /news\nНастройка источников: /sources",
+                "bio": "<b>🧬 Биографии</b>\n\nУправление ежедневными биографиями: /bio",
+                "research": "<b>🔎 Исследования</b>\n\nНедельный обзор: /week\nЛюди за неделю: /people",
+                "video": "<b>🎬 Видео</b>\n\nОтчёт по ролику: /report ссылка_на_YouTube\nКороткое резюме: /tldr ссылка_на_YouTube",
+                "status": "<b>📊 Состояние</b>\n\nПодробная диагностика: /status\nРадар: /radar",
+                "help": "<b>❔ Помощь</b>\n\nНавигация по разделам — кнопками.\nКоманды для операций с аргументами пока доступны из подсказок разделов.",
+            }
+            if page not in pages:
+                await query.answer("Неизвестный раздел", show_alert=True)
+                return
+            text, keyboard = pages[page], nav_back()
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard)
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
+        await query.answer()
+
     @router.message(Command("start"))
     async def start_handler(message: Message) -> None:
         user_id = message.from_user.id if message.from_user else None
@@ -247,7 +308,8 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             return
         if not is_allowed(settings, repository, user_id):
             return
-        await message.answer("Персональная технологическая лента готова принимать feedback.")
+        text, keyboard = home_screen()
+        await message.answer(text, reply_markup=keyboard)
 
     def load_models() -> list[dict]:
         from app.llm.codexsale import CodexSaleClient, CodexSaleError
@@ -261,6 +323,14 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         except CodexSaleError:
             logger.warning("Unable to refresh Codex Sale model list")
             return []
+
+    @router.message(Command("menu"))
+    async def menu_handler(message: Message) -> None:
+        user_id = message.from_user.id if message.from_user else None
+        if not is_allowed(settings, repository, user_id):
+            return
+        text, keyboard = home_screen()
+        await message.answer(text, reply_markup=keyboard)
 
     @router.message(Command("models"))
     async def models_handler(message: Message) -> None:
@@ -298,10 +368,19 @@ def build_router(settings: Settings, repository: Repository) -> Router:
 
         parts = (query.data or "")[len(PREFIX):].split(":")
         action = parts[0]
-        if action == "noop":
+        if action in {"noop", "unavailable"}:
             await query.answer()
             return
-        if action == "home":
+        if action == "monid":
+            text = ("<b>🎙 Monid</b>\n\nMonid уже используется для получения "
+                    "расшифровок YouTube. Это внешний источник, а не модель Codex Sale. "
+                    "Переключатель маршрута аудиофайлов пока не реализован.")
+            from aiogram.types import InlineKeyboardButton
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="← К аудио", callback_data=f"{PREFIX}task:audio")
+            ]])
+        elif action == "home":
             text = overview_text(repository)
             keyboard = overview_keyboard(repository)
         elif action == "task" and len(parts) == 2 and parts[1] in TASK_DEFAULTS:
