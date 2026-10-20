@@ -2,9 +2,9 @@ from app.llm.model_registry import set_model
 from app.telegram_bot.model_menu import (
     overview_keyboard,
     overview_text,
+    provider_keyboard,
     selection_keyboard,
     selection_text,
-    provider_keyboard,
 )
 
 
