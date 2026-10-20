@@ -49,5 +49,5 @@ jobs:
           request_dir=/var/lib/osved-deploy-requests
           test -d "$request_dir"
           request_file=$(mktemp "$request_dir/request.XXXXXXXXXX")
-          printf '%s\\n' "$RELEASE_SHA" > "$request_file"
+          printf '%s\n' "$RELEASE_SHA" > "$request_file"
           echo "Deployment request queued for $RELEASE_SHA; privileged deploy service is not yet enabled."
