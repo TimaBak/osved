@@ -108,6 +108,18 @@ def provider_keyboard(catalog: list[dict], task: str) -> InlineKeyboardMarkup:
                 text=f"{label} · {count}",
                 callback_data=f"{PREFIX}provider:{task}:{key}:0",
             )])
+    if task in {"news", "research", "search", "video"} and not any(
+        provider_for(str(item.get("id", ""))) == "deepseek" for item in catalog
+    ):
+        rows.append([InlineKeyboardButton(
+            text="DeepSeek · на сайте, API недоступен",
+            callback_data=f"{PREFIX}unavailable",
+        )])
+    if task == "audio":
+        rows.insert(0, [InlineKeyboardButton(
+            text="Monid · извлечение расшифровки",
+            callback_data=f"{PREFIX}monid",
+        )])
     rows.append([InlineKeyboardButton(text="← К задачам", callback_data=f"{PREFIX}home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
