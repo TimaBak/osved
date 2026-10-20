@@ -1,0 +1,28 @@
+name: OSVED runner smoke check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/osved-runner-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-permissions:
+    name: Verify isolated Hermes runner
+    runs-on: [self-hosted, Linux, X64, osved-deploy]
+    timeout-minutes: 4
+    steps:
+      - name: Check runner identity and permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = osved-runner
+          test ! -w /opt/osved/app
+          test ! -r /opt/osved/app/secrets
+          test ! -w /var/run/docker.sock
+          test -w /var/lib/osved-deploy-requests
+          echo "OSVED_RUNNER_CHECK=OK"
