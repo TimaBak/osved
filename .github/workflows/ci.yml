@@ -24,21 +24,30 @@ jobs:
       - run: docker build -t osved:ci .
       - run: docker run --rm osved:ci osved doctor
 
-  deploy:
-    name: Deploy to dedicated OSVED VPS
+  staging_request:
+    name: Request staging release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [tests, container]
     runs-on: [self-hosted, Linux, X64, osved-deploy]
-    environment: production
+    environment: staging
     permissions:
       contents: read
     concurrency:
-      group: osved-production
+      group: osved-staging
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Deploy checked main commit
+      - name: Submit an unprivileged deployment request
         shell: bash
-        run: bash deploy/deploy-osved.sh
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_REPO" = "TimaBak/osved"
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          umask 077
+          request_dir=/var/lib/osved-deploy-requests
+          test -d "$request_dir"
+          request_file=$(mktemp "$request_dir/request.XXXXXXXXXX")
+          printf '%s\\n' "$RELEASE_SHA" > "$request_file"
+          echo "Deployment request queued for $RELEASE_SHA; privileged deploy service is not yet enabled."
