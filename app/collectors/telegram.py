@@ -254,19 +254,25 @@ class TelegramSourceCollector:
         return len(messages), inserted
 
 
-def setup_telegram_session(settings: Settings) -> dict[str, Any]:
-    if settings.telegram_api_id is None or settings.telegram_api_hash is None:
-        raise TelegramReaderNotConfigured("TELEGRAM_API_ID and TELEGRAM_API_HASH are required")
-    settings.ensure_runtime_directories()
-    with TelegramClient(
+async def _setup_telegram_session_async(settings: Settings) -> dict[str, Any]:
+    async with TelegramClient(
         str(settings.telegram_session_path),
         settings.telegram_api_id,
         settings.telegram_api_hash.get_secret_value(),
     ) as client:
-        me = client.get_me()
+        me = await client.get_me()
+        if me is None:
+            raise TelegramSessionNotAuthorized("Telegram session has no authorized user")
         return {
             "authorized": True,
             "user_id": me.id,
             "username": me.username,
             "session_path": str(settings.telegram_session_path),
         }
+
+
+def setup_telegram_session(settings: Settings) -> dict[str, Any]:
+    if settings.telegram_api_id is None or settings.telegram_api_hash is None:
+        raise TelegramReaderNotConfigured("TELEGRAM_API_ID and TELEGRAM_API_HASH are required")
+    settings.ensure_runtime_directories()
+    return asyncio.run(_setup_telegram_session_async(settings))
