@@ -11,6 +11,7 @@ from app.db.repository import Repository
 from app.research.facts import (
     FACT_SHEET_SCHEMA_VERSION,
     FactCoverage,
+    FactConflict,
     FactSheetDraft,
     ResearchFact,
     sanitize_fact_sheet,
@@ -57,7 +58,9 @@ def revalidate_saved_fact_sheet(
             pricing=False, availability=False, limitations=False,
             independent_confirmation=False,
         ),
-        conflicts=[],
+        conflicts=[
+            FactConflict.model_validate(c) for c in coverage.get("conflicts", [])
+        ],
         editorial_hook=None,
     )
     validated, warnings = sanitize_fact_sheet(
@@ -85,8 +88,8 @@ def revalidate_saved_fact_sheet(
             **fact_policy_metadata(),
             "event_type": validated.event_type,
             "editorial_hook": validated.editorial_hook.model_dump(),
-            "conflicts": [],
-            "conflict_count": 0,
+            "conflicts": [conflict.model_dump() for conflict in validated.conflicts],
+            "conflict_count": len(validated.conflicts),
             "dropped_fact_count": len(facts) - len(validated.facts),
             "dropped_fact_errors": warnings,
         },
