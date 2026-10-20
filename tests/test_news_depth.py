@@ -68,7 +68,7 @@ def context():
 
 def test_brief_preserves_complete_lead_and_source_without_markdown():
     text = brief_card_html(CARD)
-    assert text.startswith('<b><a href="https://example.com/release">')
+    assert text.startswith('📰 <b><a href="https://example.com/release">')
     assert "&lt;быстрее&gt; &amp; дешевле." in text
     assert "Контекст и подробности" not in text
     assert "`" not in text
