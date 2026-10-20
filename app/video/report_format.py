@@ -206,7 +206,9 @@ def markdown_blocks(text: str) -> list[tuple[str, str]]:
     return blocks
 
 
-def create_pdf(path: Path, original: str, source: dict) -> dict:
+def create_pdf(
+    path: Path, original: str, source: dict, *, model: str = MODEL
+) -> dict:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
@@ -320,7 +322,7 @@ def create_pdf(path: Path, original: str, source: dict) -> dict:
     channel = str(meta.get("channel_name") or "YouTube")
     metadata = (
         f"{channel} · {str(meta.get('published_at') or '')[:10]} · "
-        f"{clock(float(meta['duration_seconds']))} · Gemini 3.8 Flash"
+        f"{clock(float(meta['duration_seconds']))} · {model}"
     )
     story = [
         Paragraph(html.escape(typography(title)), styles["Title"]),
@@ -330,7 +332,7 @@ def create_pdf(path: Path, original: str, source: dict) -> dict:
     for style, text in markdown_blocks(rendered):
         story.append(para(text, style))
     note = (
-        "Текст Gemini 3.8 Flash по полной расшифровке видео. Промпт B с расширенным TL;DR. "
+        f"Текст {model} по полной расшифровке видео. Промпт B с расширенным TL;DR. "
         "Без редакторских исправлений. Таймкоды добавлены автоматически."
     )
     story += [Spacer(1, 8), para(note, "Meta")]
@@ -341,7 +343,7 @@ def create_pdf(path: Path, original: str, source: dict) -> dict:
         canvas.setFillColor(colors.HexColor("#505050"))
         if doc.page > 1:
             canvas.drawString(19 * mm, A4[1] - 11 * mm, "ОСВЕД / Резюме видео")
-        canvas.drawString(19 * mm, 10 * mm, "Gemini 3.8 Flash / Без редактуры")
+        canvas.drawString(19 * mm, 10 * mm, f"{model} / Без редактуры")
         canvas.drawRightString(A4[0] - 19 * mm, 10 * mm, str(doc.page))
         canvas.restoreState()
 
@@ -355,7 +357,7 @@ def create_pdf(path: Path, original: str, source: dict) -> dict:
         topMargin=18 * mm,
         bottomMargin=18 * mm,
         title=title,
-        author="Gemini 3.8 Flash / unedited model response",
+        author=f"{model} / unedited model response",
     )
     doc.build(story, onFirstPage=frame, onLaterPages=frame)
     if not temp.read_bytes().startswith(b"%PDF-") or temp.stat().st_size > 40_000_000:
@@ -366,6 +368,6 @@ def create_pdf(path: Path, original: str, source: dict) -> dict:
         "pdf_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "font": fonts[1],
         "editorial_revision": False,
-        "model": MODEL,
+        "model": model,
         "prompt_version": VERSION,
     }
