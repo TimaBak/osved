@@ -551,6 +551,21 @@ def build_fact_sheet_command(event_id: int) -> None:
     typer.echo(json.dumps(result, ensure_ascii=False))
 
 
+@app.command("revalidate-saved-facts")
+def revalidate_saved_facts_command(
+    event_id: int,
+    apply: Annotated[bool, typer.Option("--apply/--dry-run")] = False,
+) -> None:
+    """Recheck stored invalid AI facts locally; --apply stores only verified results."""
+    from app.research.revalidate import revalidate_saved_fact_sheet
+
+    _, repository = bootstrap()
+    outcome = revalidate_saved_fact_sheet(repository, event_id, apply=apply)
+    typer.echo(json.dumps(outcome, ensure_ascii=False))
+    if outcome["status"] == "invalid":
+        raise typer.Exit(code=1)
+
+
 @app.command("build-dossier")
 def build_dossier_command(event_id: int) -> None:
     """Build a versioned decision snapshot from stored facts and evidence."""
