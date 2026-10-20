@@ -1535,7 +1535,8 @@ class OpenRouterCardGenerator:
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
         response_id = str(response["id"]) if response.get("id") else None
-        accounting = resolve_usage_cost(usage, model=None if self.settings.codex_sale_api_key else response_model)
+        billing_model = None if self.settings.codex_sale_api_key else response_model
+        accounting = resolve_usage_cost(usage, model=billing_model)
         try:
             content = response["choices"][0]["message"]["content"]
             raw_payload = compact_generated_card_payload(json.loads(content))
