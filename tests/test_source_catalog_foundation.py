@@ -4,7 +4,6 @@ from pathlib import Path
 
 from app.config import load_source_registry
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
