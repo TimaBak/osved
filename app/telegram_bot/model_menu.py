@@ -15,6 +15,21 @@ LABELS = {
     "image": "🖼 Изображения",
     "audio": "🎙 Аудио / транскрипция",
 }
+COEFFICIENTS = {
+    "gpt-6-astra": "11.25", "gpt-6.1-sol": "4", "gpt-6-sol": "3.8",
+    "gpt-6-luna": "0.8", "gpt-5.6-sol": "4.5", "gpt-5.5": "4.5",
+    "gpt-5.6-terra": "1.5", "gpt-5.6-luna": "0.9",
+    "glm-5.3-flash": "1", "glm-5.3": "1.5", "glm-5.2": "1.5",
+    "claude-opus-5-5": "20", "claude-fable-5-1": "20",
+    "claude-opus-5": "12", "claude-opus-4-8": "12",
+    "claude-opus-4-7": "10", "claude-opus-4-6": "10",
+    "claude-sonnet-5-5": "11", "claude-haiku-4-5-20251001": "4",
+    "claude-haiku-5-5": "9", "gpt-4o-transcribe": "1",
+    "gpt-image-2.5-sunburst": "200", "gpt-image-2.5-flare": "200",
+    "gpt-image-2": "200", "gpt-image-1.5": "200",
+}
+# DeepSeek V4.* is published on the website but not listed in this account's /models.
+# Do not invent API identifiers or offer it as an executable choice.
 PROVIDERS = {
     "gpt": "OpenAI / Codex",
     "glm": "GLM",
@@ -102,7 +117,7 @@ def selection_text(store, task: str, provider: str = "gpt") -> str:
         f"<b>{LABELS[task]} · {PROVIDERS[provider]}</b>\n\n"
         f"Сейчас: <code>{selected_model(store, task)}</code>\n"
         "✅ — выбранная модель. Стоимость показывается только при наличии "
-        "подтверждённого коэффициента в каталоге."
+        "коэффициента из опубликованной таблицы тарифов."
     )
 
 
@@ -119,8 +134,8 @@ def selection_keyboard(
         # Callback data is capped by Telegram at 64 bytes.
         if len(f"{PREFIX}set:{task}:{model}".encode()) > 64:
             continue
-        rate = item.get("multiplier")
-        rate_label = f" · ×{rate}" if isinstance(rate, (int, float)) and rate > 0 else ""
+        rate = item.get("multiplier") or COEFFICIENTS.get(model)
+        rate_label = f" · ×{rate}" if rate else ""
         rows.append([InlineKeyboardButton(
             text=("✅ " if model == current else "") + model + rate_label,
             callback_data=f"{PREFIX}set:{task}:{model}",
