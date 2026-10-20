@@ -267,23 +267,87 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             await query.answer()
             return
         page = (query.data or "").removeprefix("osved_nav:")
+        from aiogram.types import InlineKeyboardButton
+
         if page == "models":
             from app.telegram_bot.model_menu import overview_keyboard, overview_text
+
             text, keyboard = overview_text(repository), overview_keyboard(repository)
         elif page == "home":
             text, keyboard = home_screen()
+        elif page == "status":
+            text = "<b>📊 Состояние ОСВЕД</b>\n\nВыбери, что проверить:"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="📋 Подробный статус", callback_data="osved_nav:status_detail"
+                )],
+                [InlineKeyboardButton(
+                    text="📡 Радар и источники", callback_data="osved_nav:radar"
+                )],
+                [InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "status_detail":
+            import html as html_module
+
+            counts = repository.status_counts()
+            credentials = settings.credential_status()
+            rows = ["<b>📋 Статус ОСВЕД</b>", ""]
+            for key in ("sources", "enabled_sources", "events", "valid_cards",
+                        "sent_deliveries", "month_cost_usd"):
+                rows.append(f"{key}: {html_module.escape(str(counts.get(key, 0)))}")
+            rows.append("")
+            rows.append("Интеграции:")
+            for key in ("telegram_bot", "codexsale", "monid", "telegram_reader"):
+                rows.append(f"{key}: {'✅' if credentials.get(key) else '—'}")
+            text = "\n".join(rows)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Обновить", callback_data="osved_nav:status_detail")],
+                [InlineKeyboardButton(text="← Состояние", callback_data="osved_nav:status")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "radar":
+            from app.telegram_bot.sensory import radar_status_text
+
+            text = radar_status_text(repository)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Обновить", callback_data="osved_nav:radar")],
+                [InlineKeyboardButton(text="📡 Источники", callback_data="osved_nav:sources")],
+                [InlineKeyboardButton(text="← Состояние", callback_data="osved_nav:status")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "sources":
+            from app.telegram_bot.sensory import source_menu
+
+            text, existing = source_menu(repository)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                *existing.inline_keyboard,
+                [InlineKeyboardButton(text="← К радару", callback_data="osved_nav:radar")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "video":
+            text = "<b>🎬 Видео и PDF</b>\n\nВыбери формат отчёта:"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📄 Подробный PDF", callback_data="osved_nav:video_pdf")],
+                [InlineKeyboardButton(text="📝 Короткое резюме", callback_data="osved_nav:video_tldr")],
+                [InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")],
+            ])
+        elif page in {"video_pdf", "video_tldr"}:
+            kind = "pdf" if page == "video_pdf" else "tldr"
+            repository.set_runtime_setting(f"osved.video.next:{query.from_user.id}", kind)
+            text = (
+                "<b>📄 PDF</b>\n\n" if kind == "pdf"
+                else "<b>📝 Краткий пересказ</b>\n\n"
+            ) + "Теперь отправь ссылку на одно видео YouTube обычным сообщением."
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="← К видео", callback_data="osved_nav:video")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
         else:
             pages = {
-                "news": ("<b>📰 Новости</b>\n\nПолучить следующую новость: /news\n"
-                    "Настройка источников: /sources"),
-                "bio": "<b>🧬 Биографии</b>\n\nУправление ежедневными биографиями: /bio",
-                "research": ("<b>🔎 Исследования</b>\n\nНедельный обзор: /week\n"
-                    "Люди за неделю: /people"),
-                "video": ("<b>🎬 Видео</b>\n\nОтчёт по ролику: /report ссылка_на_YouTube\n"
-                    "Короткое резюме: /tldr ссылка_на_YouTube"),
-                "status": "<b>📊 Состояние</b>\n\nПодробная диагностика: /status\nРадар: /radar",
-                "help": ("<b>❔ Помощь</b>\n\nНавигация по разделам — кнопками.\n"
-                         "Команды для операций с аргументами доступны в разделах."),
+                "news": "<b>📰 Новости</b>\n\nИсточники и очередь пока пусты.",
+                "bio": "<b>🧬 Биографии</b>\n\nМатериалы появятся после сбора новостей.",
+                "research": "<b>🔎 Исследования</b>\n\nПока нет проверенных событий.",
+                "help": "<b>❔ Помощь</b>\n\nОткрой раздел и следуй кнопкам.",
             }
             if page not in pages:
                 await query.answer("Неизвестный раздел", show_alert=True)
