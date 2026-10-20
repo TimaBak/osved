@@ -22,7 +22,7 @@ class MemoryStore:
 def test_model_menu_shows_tasks_and_selected_models():
     store = MemoryStore()
     keyboard = overview_keyboard(store)
-    assert len(keyboard.inline_keyboard) == 6
+    assert len(keyboard.inline_keyboard) == 7
     assert "gpt-6-luna" in overview_text(store)
     assert keyboard.inline_keyboard[0][0].callback_data == "osved_models:task:news"
 
