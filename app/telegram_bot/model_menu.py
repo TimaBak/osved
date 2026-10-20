@@ -87,7 +87,7 @@ def overview_keyboard(store) -> InlineKeyboardMarkup:
             text=f"{LABELS[task]} · {selected_model(store, task)}",
             callback_data=f"{PREFIX}task:{task}",
         )] for task in TASK_DEFAULTS
-    ])
+    ] + [[InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")]])
 
 
 def provider_text(store, task: str) -> str:
