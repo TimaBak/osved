@@ -249,6 +249,19 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             return
         await message.answer("Персональная технологическая лента готова принимать feedback.")
 
+    def load_models() -> list[dict]:
+        from app.llm.codexsale import CodexSaleClient, CodexSaleError
+
+        if settings.codex_sale_api_key is None:
+            return []
+        try:
+            return CodexSaleClient(
+                settings.codex_sale_api_key.get_secret_value(), timeout=12
+            ).models()
+        except CodexSaleError:
+            logger.warning("Unable to refresh Codex Sale model list")
+            return []
+
     @router.message(Command("models"))
     async def models_handler(message: Message) -> None:
         user_id = message.from_user.id if message.from_user else None
@@ -271,36 +284,51 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         if query.message is None:
             await query.answer()
             return
-        from app.llm.model_registry import TASK_DEFAULTS, TEXT_MODELS, set_model
+        from app.llm.model_registry import TASK_DEFAULTS, set_model
         from app.telegram_bot.model_menu import (
             PREFIX,
+            available_models,
             overview_keyboard,
             overview_text,
+            provider_keyboard,
+            provider_text,
             selection_keyboard,
             selection_text,
         )
 
-        action = (query.data or "")[len(PREFIX):]
-        task = None
+        parts = (query.data or "")[len(PREFIX):].split(":")
+        action = parts[0]
+        if action == "noop":
+            await query.answer()
+            return
         if action == "home":
             text = overview_text(repository)
             keyboard = overview_keyboard(repository)
-        elif action.startswith("task:"):
-            task = action.partition(":")[2]
-            if task not in TASK_DEFAULTS:
-                await query.answer("Неизвестная задача", show_alert=True)
+        elif action == "task" and len(parts) == 2 and parts[1] in TASK_DEFAULTS:
+            task = parts[1]
+            catalog = await asyncio.to_thread(load_models)
+            text = provider_text(repository, task)
+            keyboard = provider_keyboard(catalog, task)
+        elif action == "provider" and len(parts) == 4 and parts[1] in TASK_DEFAULTS:
+            task, provider = parts[1], parts[2]
+            try:
+                page = int(parts[3])
+            except ValueError:
+                await query.answer("Неверная страница", show_alert=True)
                 return
-            text = selection_text(repository, task)
-            keyboard = selection_keyboard(repository, task)
-        elif action.startswith("set:"):
-            _, _, rest = action.partition(":")
-            task, sep, model = rest.partition(":")
-            if not sep or task not in TASK_DEFAULTS or model not in TEXT_MODELS:
-                await query.answer("Неизвестная модель", show_alert=True)
+            catalog = await asyncio.to_thread(load_models)
+            text = selection_text(repository, task, provider)
+            keyboard = selection_keyboard(repository, task, provider, page, catalog)
+        elif action == "set" and len(parts) == 3 and parts[1] in TASK_DEFAULTS:
+            task, model = parts[1], parts[2]
+            catalog = await asyncio.to_thread(load_models)
+            approved = {str(item["id"]) for item in available_models(catalog, task)}
+            if model not in approved:
+                await query.answer("Модель недоступна в каталоге", show_alert=True)
                 return
-            set_model(repository, task, model)
-            text = selection_text(repository, task)
-            keyboard = selection_keyboard(repository, task)
+            set_model(repository, task, model, allowed=approved)
+            text = provider_text(repository, task)
+            keyboard = provider_keyboard(catalog, task)
         else:
             await query.answer("Неизвестное действие", show_alert=True)
             return
@@ -309,32 +337,14 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         except TelegramBadRequest as exc:
             if "message is not modified" not in str(exc).lower():
                 raise
-        await query.answer("Модель сохранена" if action.startswith("set:") else None)
+        await query.answer("Модель сохранена" if action == "set" else None)
 
     @router.message(Command("model"))
     async def model_handler(message: Message) -> None:
         user_id = message.from_user.id if message.from_user else None
         if not is_allowed(settings, repository, user_id):
             return
-        from app.llm.model_registry import TEXT_MODELS, set_model
-
-        args = (message.text or "").split()
-        if len(args) != 3:
-            await message.answer(
-                "Использование: <code>/model news gpt-6-luna</code>\n"
-                "Доступные модели: " + ", ".join(TEXT_MODELS)
-            )
-            return
-        try:
-            set_model(repository, args[1].lower(), args[2])
-        except ValueError:
-            await message.answer("Неизвестная задача или модель. Посмотри /models.")
-            return
-        await message.answer(
-            f"Настройка сохранена: <code>{args[1].lower()}</code> → "
-            f"<code>{args[2]}</code>. "
-            "Подключение к рабочим AI-вызовам выполняется отдельным этапом."
-        )
+        await message.answer("Выбор моделей доступен через /models — кнопками.")
 
     @router.message(Command("status"))
     async def status_handler(message: Message) -> None:
