@@ -254,19 +254,58 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         user_id = message.from_user.id if message.from_user else None
         if not is_allowed(settings, repository, user_id):
             return
-        from app.llm.model_registry import TASK_DEFAULTS, selected_model
+        from app.telegram_bot.model_menu import overview_keyboard, overview_text
 
-        rows = [
-            f"<code>{task}</code>: <code>{selected_model(repository, task)}</code>"
-            for task in TASK_DEFAULTS
-        ]
-        await message.answer(
-            "<b>Codex Sale · выбранные модели</b>\n"
-            + "\n".join(rows)
-            + "\n\nИзменить: <code>/model news gpt-6-luna</code>\n"
-            + "Задачи: news, research, search, video. "
-            + "Выбранные модели ещё не подключены к рабочей генерации."
+        await message.answer(overview_text(repository), reply_markup=overview_keyboard(repository))
+
+    @router.callback_query(lambda query: bool(query.data and query.data.startswith("osved_models:")))
+    async def models_callback(query: CallbackQuery) -> None:
+        user_id = query.from_user.id if query.from_user else None
+        if not is_allowed(settings, repository, user_id):
+            await query.answer("Нет доступа", show_alert=True)
+            return
+        if query.message is None:
+            await query.answer()
+            return
+        from app.llm.model_registry import TASK_DEFAULTS, TEXT_MODELS, set_model
+        from app.telegram_bot.model_menu import (
+            PREFIX,
+            overview_keyboard,
+            overview_text,
+            selection_keyboard,
+            selection_text,
         )
+
+        action = (query.data or "")[len(PREFIX):]
+        task = None
+        if action == "home":
+            text = overview_text(repository)
+            keyboard = overview_keyboard(repository)
+        elif action.startswith("task:"):
+            task = action.partition(":")[2]
+            if task not in TASK_DEFAULTS:
+                await query.answer("Неизвестная задача", show_alert=True)
+                return
+            text = selection_text(repository, task)
+            keyboard = selection_keyboard(repository, task)
+        elif action.startswith("set:"):
+            _, _, rest = action.partition(":")
+            task, sep, model = rest.partition(":")
+            if not sep or task not in TASK_DEFAULTS or model not in TEXT_MODELS:
+                await query.answer("Неизвестная модель", show_alert=True)
+                return
+            set_model(repository, task, model)
+            text = selection_text(repository, task)
+            keyboard = selection_keyboard(repository, task)
+        else:
+            await query.answer("Неизвестное действие", show_alert=True)
+            return
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard)
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
+        await query.answer("Модель сохранена" if action.startswith("set:") else None)
 
     @router.message(Command("model"))
     async def model_handler(message: Message) -> None:
