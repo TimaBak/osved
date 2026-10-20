@@ -130,7 +130,10 @@ def selection_keyboard(
         navigation.append(InlineKeyboardButton(
             text="◀", callback_data=f"{PREFIX}provider:{task}:{provider}:{page - 1}",
         ))
-    navigation.append(InlineKeyboardButton(text=f"{page + 1}/{max(1, (len(options) + PAGE_SIZE - 1) // PAGE_SIZE)}", callback_data=f"{PREFIX}noop"))
+    pages = max(1, (len(options) + PAGE_SIZE - 1) // PAGE_SIZE)
+    navigation.append(InlineKeyboardButton(
+        text=f"{page + 1}/{pages}", callback_data=f"{PREFIX}noop",
+    ))
     if (page + 1) * PAGE_SIZE < len(options):
         navigation.append(InlineKeyboardButton(
             text="▶", callback_data=f"{PREFIX}provider:{task}:{provider}:{page + 1}",
