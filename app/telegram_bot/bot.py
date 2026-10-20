@@ -324,6 +324,46 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                 [InlineKeyboardButton(text="← К радару", callback_data="osved_nav:radar")],
                 [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
             ])
+        elif page == "news":
+            text = (
+                "<b>📰 Новости</b>\n\n"
+                "Источников пока нет. Добавь Telegram-канал или YouTube-канал "
+                "по ссылке, затем проверь радар. RSS и Reddit требуют настройки YAML."
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="➕ Telegram-канал", callback_data="osved_nav:add_telegram"
+                )],
+                [InlineKeyboardButton(
+                    text="➕ YouTube-канал", callback_data="osved_nav:add_youtube"
+                )],
+                [InlineKeyboardButton(
+                    text="📡 Мои источники", callback_data="osved_nav:sources"
+                )],
+                [InlineKeyboardButton(
+                    text="📊 Радар", callback_data="osved_nav:radar"
+                )],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page in {"add_telegram", "add_youtube"}:
+            if page == "add_telegram":
+                text = (
+                    "<b>➕ Telegram-канал</b>\n\n"
+                    "Пришли публичную ссылку t.me/название или @название "
+                    "обычным сообщением. ОСВЕД распознает её и предложит добавить канал. "
+                    "Для прямого чтения некоторых каналов понадобится Telegram Reader."
+                )
+            else:
+                text = (
+                    "<b>➕ Канал YouTube</b>\n\n"
+                    "Пришли ссылку на канал (youtube.com/@имя) "
+                    "обычным сообщением. Это добавит его в радар; "
+                    "ссылка на отдельный ролик создаёт резюме, а не подписку."
+                )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="← Новости", callback_data="osved_nav:news")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
         elif page == "video":
             text = "<b>🎬 Видео и PDF</b>\n\nВыбери формат отчёта:"
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
