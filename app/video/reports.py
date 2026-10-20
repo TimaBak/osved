@@ -195,15 +195,26 @@ class VideoReportService:
                 raise ReportError("uncertain")
             # Also closes a crash between saving the rejection and settling it.
             self._settle(previous["ledger_id"], 0.0, rejected_usage)
-        if self.settings.openrouter_api_key is None:
+        if self.settings.codex_sale_api_key is None and self.settings.openrouter_api_key is None:
             raise ReportError("disabled")
-        ledger_id = self._reserve("openrouter", reserve, video, operation=operation)
+        provider = "codexsale" if self.settings.codex_sale_api_key else "openrouter"
+        ledger_id = self._reserve(provider, reserve, video, operation=operation)
         marker = {"ledger_id": ledger_id, "reserve_usd": reserve}
         save_json(directory / "request.json", request)
         save_json(started, marker)
         report_progress(progress, "writing")
         try:
-            response = self.transport(request, self.settings.openrouter_api_key.get_secret_value())
+            key = self.settings.codex_sale_api_key or self.settings.openrouter_api_key
+            assert key is not None
+            if self.settings.codex_sale_api_key and self.transport is model_transport:
+                from app.llm.codexsale import CodexSaleClient
+
+                payload = {**request, "model": self.settings.codex_sale_model}
+                response = CodexSaleClient(key.get_secret_value(), timeout=300).chat(
+                    model=payload.pop("model"), messages=payload.pop("messages"), **payload
+                )
+            else:
+                response = self.transport(request, key.get_secret_value())
         except Exception as exc:
             http_status = exc.code if isinstance(exc, HTTPError) else None
             rejected = http_status == 402
@@ -334,7 +345,7 @@ class VideoReportService:
                     and self.settings.video_report_max_cost_usd < TRANSCRIPT_COST
                 ):
                     raise ReportError("budget_blocked")
-                if self.settings.openrouter_api_key is None:
+                if not (self.settings.codex_sale_api_key or self.settings.openrouter_api_key):
                     raise ReportError("disabled")
                 report_progress(progress, "transcript")
                 source = self._transcript(video)
@@ -437,7 +448,7 @@ class VideoReportService:
                 report_progress(progress, "cache")
                 return cached
             try:
-                if self.settings.openrouter_api_key is None:
+                if not (self.settings.codex_sale_api_key or self.settings.openrouter_api_key):
                     raise ReportError("disabled")
                 if (
                     self.settings.video_report_budget_enabled
