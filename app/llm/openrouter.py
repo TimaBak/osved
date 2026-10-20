@@ -409,6 +409,19 @@ def normalize_russian_text(text: str) -> str:
     return text
 
 
+def codex_sale_transport(payload: dict[str, Any], api_key: str) -> dict[str, Any]:
+    """Dispatch the existing structured chat payload to Codex Sale."""
+    from app.llm.codexsale import CodexSaleClient
+
+    client = CodexSaleClient(api_key, timeout=90)
+    response = client.chat(
+        model=str(payload["model"]),
+        messages=payload["messages"],
+        **{key: value for key, value in payload.items() if key not in {"model", "messages"}},
+    )
+    return response
+
+
 def http_transport(payload: dict[str, Any], api_key: str) -> dict[str, Any]:
     request = Request(
         OPENROUTER_CHAT_URL,
@@ -1487,11 +1500,12 @@ class OpenRouterCardGenerator:
         model: str | None = None,
         repair_context: dict[str, Any] | None = None,
     ) -> OpenRouterResult:
-        if self.settings.openrouter_api_key is None:
-            raise OpenRouterNotConfigured("OPENROUTER_API_KEY is required")
+        key = self.settings.codex_sale_api_key or self.settings.openrouter_api_key
+        if key is None:
+            raise OpenRouterNotConfigured("CODEX_SALE_API_KEY is required")
         if not known_urls:
             raise CardValidationError("At least one known URL is required")
-        model = model or self.settings.openrouter_model or "google/gemini-2.5-flash-lite"
+        model = model or (self.settings.codex_sale_model if self.settings.codex_sale_api_key else self.settings.openrouter_model) or "gpt-6-luna"
         payload = build_request(
             model=model,
             source_name=source_name,
@@ -1509,18 +1523,19 @@ class OpenRouterCardGenerator:
                     "role": "user",
                     "content": build_repair_message(
                         repair_context,
-                        api_key=self.settings.openrouter_api_key.get_secret_value(),
+                        api_key=key.get_secret_value(),
                     ),
                 }
             )
-        response = self.transport(
+        transport = codex_sale_transport if self.settings.codex_sale_api_key and self.transport is http_transport else self.transport
+        response = transport(
             payload,
-            self.settings.openrouter_api_key.get_secret_value(),
+            key.get_secret_value(),
         )
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
         response_id = str(response["id"]) if response.get("id") else None
-        accounting = resolve_usage_cost(usage, model=response_model)
+        accounting = resolve_usage_cost(usage, model=None if self.settings.codex_sale_api_key else response_model)
         try:
             content = response["choices"][0]["message"]["content"]
             raw_payload = compact_generated_card_payload(json.loads(content))
