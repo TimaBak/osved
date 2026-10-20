@@ -206,6 +206,8 @@ def register_video_report_handlers(router, settings: Settings, repository: Repos
         if not settings.video_reports_enabled:
             await callback.answer("Отчёты по видео сейчас выключены", show_alert=True)
             return
+        if chosen in {"pdf", "tldr"}:
+            repository.set_runtime_setting(f"osved.video.next:{user_id}", "")
         result = enqueue(
             settings,
             repository,
@@ -236,6 +238,9 @@ def register_video_report_handlers(router, settings: Settings, repository: Repos
             return
         text = message.text or message.caption or ""
         explicit = text.split(maxsplit=1)[0].split("@")[0].lower() == "/report"
+        chosen = repository.get_runtime_setting(f"osved.video.next:{user_id}")
+        if chosen in {"pdf", "tldr"} and not explicit:
+            explicit = chosen == "pdf"
         session = repository.feedback_session_for_user(user_id)
         if session and session["state"] == "awaiting_comment" and not explicit:
             raise SkipHandler()  # A link can be part of the user's superreaction comment.
