@@ -1505,7 +1505,12 @@ class OpenRouterCardGenerator:
             raise OpenRouterNotConfigured("CODEX_SALE_API_KEY is required")
         if not known_urls:
             raise CardValidationError("At least one known URL is required")
-        model = model or (self.settings.codex_sale_model if self.settings.codex_sale_api_key else self.settings.openrouter_model) or "gpt-6-luna"
+        default_model = (
+            self.settings.codex_sale_model
+            if self.settings.codex_sale_api_key
+            else self.settings.openrouter_model
+        )
+        model = model or default_model or "gpt-6-luna"
         payload = build_request(
             model=model,
             source_name=source_name,
@@ -1527,7 +1532,9 @@ class OpenRouterCardGenerator:
                     ),
                 }
             )
-        transport = codex_sale_transport if self.settings.codex_sale_api_key and self.transport is http_transport else self.transport
+        transport = self.transport
+        if self.settings.codex_sale_api_key and transport is http_transport:
+            transport = codex_sale_transport
         response = transport(
             payload,
             key.get_secret_value(),
