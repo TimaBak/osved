@@ -21,8 +21,8 @@ from app.llm.openrouter import (
     OpenRouterNotConfigured,
     OpenRouterResponseError,
     Transport,
-    http_transport,
     codex_sale_transport,
+    http_transport,
     known_organizations,
     material_hook_stems,
 )
@@ -1432,7 +1432,9 @@ class OpenRouterFactSheetGenerator:
             raise OpenRouterNotConfigured("AI provider key is required")
         payload = build_fact_sheet_request(model=model, event=event, documents=documents)
         key = self.settings.codex_sale_api_key or self.settings.openrouter_api_key
-        transport = codex_sale_transport if self.settings.codex_sale_api_key and self.transport is http_transport else self.transport
+        transport = self.transport
+        if self.settings.codex_sale_api_key and transport is http_transport:
+            transport = codex_sale_transport
         response = transport(payload, key.get_secret_value())
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
@@ -1499,7 +1501,12 @@ class OpenRouterFactSheetGenerator:
 
 def fact_sheet_models(settings: Settings) -> list[str]:
     models: list[str] = []
-    for model in ([settings.codex_sale_model] if settings.codex_sale_api_key else [settings.openrouter_model, settings.openrouter_fallback_model]):
+    available_models = (
+        [settings.codex_sale_model]
+        if settings.codex_sale_api_key
+        else [settings.openrouter_model, settings.openrouter_fallback_model]
+    )
+    for model in available_models:
         if model and model not in models:
             models.append(model)
     return models
