@@ -34,7 +34,10 @@ def test_model_change_updates_same_menu_state():
     assert "gpt-5.6-terra" in overview_text(store)
     catalog = [{"id": "gpt-5.6-terra"}, {"id": "gpt-6-luna"}]
     keyboard = selection_keyboard(store, "news", catalog=catalog)
-    assert any(row[0].text.startswith("✅ gpt-5.6-terra · ×1.5") for row in keyboard.inline_keyboard)
+    assert any(
+        row[0].text.startswith("✅ gpt-5.6-terra · ×1.5")
+        for row in keyboard.inline_keyboard
+    )
     assert keyboard.inline_keyboard[-1][0].callback_data == "osved_models:task:news"
     providers = provider_keyboard(catalog, "news")
     assert providers.inline_keyboard[0][0].text.startswith("OpenAI / Codex")
