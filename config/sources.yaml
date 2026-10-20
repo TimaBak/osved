@@ -51,7 +51,7 @@ sources:
   - id: rss_github_blog
     name: GitHub Blog
     kind: rss
-    locator: https://github.blog/feed
+    locator: https://github.blog/all.atom
     role: primary
     enabled: true
     candidate_enabled: true
