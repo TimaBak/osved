@@ -3,11 +3,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 from typer.testing import CliRunner
 
 import app.cli as cli
-from pydantic import SecretStr
-
 from app.config import Settings
 from app.ops.schedule import ScheduledJobExecutor
 from tests.test_radar_feedback import discovery_delivery, repository
@@ -17,7 +16,10 @@ def test_explicit_pipeline_uses_shared_steps_and_preserves_limits(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path, allowed_user_id=123, codex_sale_api_key=SecretStr('test-only'))
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, allowed_user_id=123,
+        codex_sale_api_key=SecretStr('test-only'),
+    )
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     calls = []
 
@@ -64,7 +66,9 @@ def test_no_deliver_and_unsuccessful_research_stop_repeated_spend(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path, codex_sale_api_key=SecretStr('test-only'))
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, codex_sale_api_key=SecretStr('test-only'),
+    )
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     calls = []
 
