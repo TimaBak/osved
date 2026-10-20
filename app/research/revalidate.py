@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 from app.db.repository import Repository
 from app.research.facts import (
     FACT_SHEET_SCHEMA_VERSION,
-    FactCoverage,
     FactConflict,
+    FactCoverage,
     FactSheetDraft,
     ResearchFact,
     sanitize_fact_sheet,
