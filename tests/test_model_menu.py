@@ -51,7 +51,7 @@ def test_claude_and_image_audio_coefficients():
     store = MemoryStore()
     assert provider_for("claude-opus-5-5") == "anthropic"
     assert len(available_models(catalog, "news", "anthropic")) == 1
-    image_button = selection_keyboard(store, "image", "other", 0, catalog)
+    image_button = selection_keyboard(store, "image", "gpt", 0, catalog)
     assert "×200" in image_button.inline_keyboard[0][0].text
     audio_button = selection_keyboard(store, "audio", "gpt", 0, catalog)
     assert "×1" in audio_button.inline_keyboard[0][0].text
