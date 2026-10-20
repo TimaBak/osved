@@ -346,6 +346,11 @@ EVIDENCE_CONCEPT_PATTERNS: dict[str, re.Pattern[str]] = {
     "robotics": re.compile(r"\b(?:robot\w*|робот\w*)\b", re.IGNORECASE),
     "text": re.compile(r"\b(?:text\w*|текст\w*)\b", re.IGNORECASE),
     "video": re.compile(r"\b(?:video|видео)\b", re.IGNORECASE),
+    # A specific product/category phrase shared by the original headline and cited fact.
+    "verified_bots": re.compile(
+        r"\b(?:verified[\s-]+bots?|верифицированн\w*\s+бот\w*|проверенн\w*\s+бот\w*)\b",
+        re.IGNORECASE,
+    ),
 }
 NEGATION_PATTERN = re.compile(
     r"\b(?:not|no|cannot|can't|doesn't|only|не|нет|только|лишь)\b",
