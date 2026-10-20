@@ -15,6 +15,8 @@ TASK_DEFAULTS = {
     "research": "gpt-6.1-sol",
     "search": "gpt-6-luna",
     "video": "gpt-5.6-terra",
+    "image": "gpt-image-2",
+    "audio": "gpt-4o-transcribe",
 }
 KEY_PREFIX = "codexsale.model."
 
@@ -28,12 +30,14 @@ def selected_model(store: SettingsStore, task: str) -> str:
     if task not in TASK_DEFAULTS:
         raise ValueError("Unknown model task")
     stored = store.get_runtime_setting(KEY_PREFIX + task)
-    return stored if stored in TEXT_MODELS else TASK_DEFAULTS[task]
+    return stored or TASK_DEFAULTS[task]
 
 
-def set_model(store: SettingsStore, task: str, model: str) -> None:
+def set_model(\n    store: SettingsStore, task: str, model: str,\n    *, allowed: set[str] | None = None,\n) -> None:
     if task not in TASK_DEFAULTS:
         raise ValueError("Unknown model task")
-    if model not in TEXT_MODELS:
-        raise ValueError("Unsupported text model")
+    if allowed is None:
+        allowed = set(TEXT_MODELS)
+    if model not in allowed:
+        raise ValueError("Unsupported model")
     store.set_runtime_setting(KEY_PREFIX + task, model)
