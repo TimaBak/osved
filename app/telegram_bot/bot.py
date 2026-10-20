@@ -327,8 +327,12 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         elif page == "video":
             text = "<b>🎬 Видео и PDF</b>\n\nВыбери формат отчёта:"
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📄 Подробный PDF", callback_data="osved_nav:video_pdf")],
-                [InlineKeyboardButton(text="📝 Короткое резюме", callback_data="osved_nav:video_tldr")],
+                [InlineKeyboardButton(
+                    text="📄 Подробный PDF", callback_data="osved_nav:video_pdf"
+                )],
+                [InlineKeyboardButton(
+                    text="📝 Короткое резюме", callback_data="osved_nav:video_tldr"
+                )],
                 [InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")],
             ])
         elif page in {"video_pdf", "video_tldr"}:
