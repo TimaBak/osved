@@ -38,3 +38,20 @@ def test_model_change_updates_same_menu_state():
     assert keyboard.inline_keyboard[-1][0].callback_data == "osved_models:task:news"
     providers = provider_keyboard(catalog, "news")
     assert providers.inline_keyboard[0][0].text.startswith("OpenAI / Codex")
+
+
+def test_claude_and_image_audio_coefficients():
+    from app.telegram_bot.model_menu import available_models, provider_for
+
+    catalog = [
+        {"id": "claude-opus-5-5"},
+        {"id": "gpt-image-2.5-flare"},
+        {"id": "gpt-4o-transcribe"},
+    ]
+    store = MemoryStore()
+    assert provider_for("claude-opus-5-5") == "anthropic"
+    assert len(available_models(catalog, "news", "anthropic")) == 1
+    image_button = selection_keyboard(store, "image", "other", 0, catalog)
+    assert "×200" in image_button.inline_keyboard[0][0].text
+    audio_button = selection_keyboard(store, "audio", "gpt", 0, catalog)
+    assert "×1" in audio_button.inline_keyboard[0][0].text
