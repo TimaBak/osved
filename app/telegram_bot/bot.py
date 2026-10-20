@@ -282,7 +282,8 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                 "video": ("<b>🎬 Видео</b>\n\nОтчёт по ролику: /report ссылка_на_YouTube\n"
                     "Короткое резюме: /tldr ссылка_на_YouTube"),
                 "status": "<b>📊 Состояние</b>\n\nПодробная диагностика: /status\nРадар: /radar",
-                "help": "<b>❔ Помощь</b>\n\nНавигация по разделам — кнопками.\nКоманды для операций с аргументами пока доступны из подсказок разделов.",
+                "help": ("<b>❔ Помощь</b>\n\nНавигация по разделам — кнопками.\n"
+                         "Команды для операций с аргументами доступны в разделах."),
             }
             if page not in pages:
                 await query.answer("Неизвестный раздел", show_alert=True)
