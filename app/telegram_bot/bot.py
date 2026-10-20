@@ -235,9 +235,11 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         buttons = [
             [InlineKeyboardButton(text="📰 Новости", callback_data="osved_nav:news"),
              InlineKeyboardButton(text="🧬 Биографии", callback_data="osved_nav:bio")],
-            [InlineKeyboardButton(text="🔎 Поиск и исследования", callback_data="osved_nav:research")],
+            [InlineKeyboardButton(text="🔎 Поиск и исследования",
+                 callback_data="osved_nav:research")],
             [InlineKeyboardButton(text="🎬 Видео и PDF", callback_data="osved_nav:video")],
-            [InlineKeyboardButton(text="⚙️ Модели и провайдеры", callback_data="osved_nav:models")],
+            [InlineKeyboardButton(text="⚙️ Модели и провайдеры",
+                 callback_data="osved_nav:models")],
             [InlineKeyboardButton(text="📊 Статус", callback_data="osved_nav:status"),
              InlineKeyboardButton(text="❔ Помощь", callback_data="osved_nav:help")],
         ]
@@ -272,10 +274,13 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             text, keyboard = home_screen()
         else:
             pages = {
-                "news": "<b>📰 Новости</b>\n\nПолучить следующую новость: /news\nНастройка источников: /sources",
+                "news": ("<b>📰 Новости</b>\n\nПолучить следующую новость: /news\n"
+                    "Настройка источников: /sources"),
                 "bio": "<b>🧬 Биографии</b>\n\nУправление ежедневными биографиями: /bio",
-                "research": "<b>🔎 Исследования</b>\n\nНедельный обзор: /week\nЛюди за неделю: /people",
-                "video": "<b>🎬 Видео</b>\n\nОтчёт по ролику: /report ссылка_на_YouTube\nКороткое резюме: /tldr ссылка_на_YouTube",
+                "research": ("<b>🔎 Исследования</b>\n\nНедельный обзор: /week\n"
+                    "Люди за неделю: /people"),
+                "video": ("<b>🎬 Видео</b>\n\nОтчёт по ролику: /report ссылка_на_YouTube\n"
+                    "Короткое резюме: /tldr ссылка_на_YouTube"),
                 "status": "<b>📊 Состояние</b>\n\nПодробная диагностика: /status\nРадар: /radar",
                 "help": "<b>❔ Помощь</b>\n\nНавигация по разделам — кнопками.\nКоманды для операций с аргументами пока доступны из подсказок разделов.",
             }
