@@ -33,7 +33,10 @@ def selected_model(store: SettingsStore, task: str) -> str:
     return stored or TASK_DEFAULTS[task]
 
 
-def set_model(\n    store: SettingsStore, task: str, model: str,\n    *, allowed: set[str] | None = None,\n) -> None:
+def set_model(
+    store: SettingsStore, task: str, model: str,
+    *, allowed: set[str] | None = None,
+) -> None:
     if task not in TASK_DEFAULTS:
         raise ValueError("Unknown model task")
     if allowed is None:
