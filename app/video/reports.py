@@ -374,8 +374,7 @@ class VideoReportService:
                 choice = response.get("choices", [{}])[0]
                 original = choice.get("message", {}).get("content")
                 if (
-                    response.get("model") != MODEL
-                    or choice.get("finish_reason") != "stop"
+                    choice.get("finish_reason") not in {"stop", "end_turn"}
                     or not isinstance(original, str)
                     or not original.strip()
                 ):
@@ -485,7 +484,7 @@ class VideoReportService:
                 report_progress(progress, "formatting")
                 choice = response.get("choices", [{}])[0]
                 original = choice.get("message", {}).get("content")
-                if response.get("model") != MODEL or choice.get("finish_reason") != "stop":
+                if choice.get("finish_reason") not in {"stop", "end_turn"}:
                     raise ReportError("invalid_output")
                 text = extract_tldr(original)
                 save_json(
