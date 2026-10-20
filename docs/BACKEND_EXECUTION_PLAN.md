@@ -7,7 +7,7 @@
 - [x] Verify collection, ingestion, deduplication, and Codex Sale routing using pilot data.
 - [x] Make `pipeline-once --generate-limit 1` mean at most one research candidate per iteration.
 - [x] Fix CI regressions; maintain green Ruff, pytest and container checks.
-- [ ] **Gate P0-A:** Revalidate Cloudflare event 36 from saved facts without buying another extraction; ensure the saved evidence supports the editorial hook. Fail closed when it does not.
+- [x] Implement a no-network stored-fact revalidator with dry-run by default; preserve fact conflicts and existing evidence checks. CI verified.\n- [ ] **Gate P0-A:** Validate Cloudflare event 36 against Hermes SQLite using `osved revalidate-saved-facts 36` (dry-run); use `--apply` only if valid.
 - [ ] **Gate P0-B:** Generate a *valid* grounded Telegram card and dossier from stored evidence. Verify no delivery and bounded cost.
 - [ ] **Gate P0-C:** Run 3 consecutive controlled end-to-end cycles and inspect costs/errors/duplicate handling.
 
@@ -43,4 +43,4 @@
 
 ## Release discipline
 
-Every chunk: read live branch → implement → add regression tests → observe CI → fix to green → mark status with exact commit → next chunk. Report separately: **committed**, **CI-tested**, **verified on Hermes**. Do not publish, send messages or repeat paid research as a test of unrelated code.
+Offline recovery: `osved revalidate-saved-facts 36` is read-only and has no external API calls; if valid, `osved revalidate-saved-facts 36 --apply` stores a new validated fact sheet and dossier without repeat LLM charges. It never overrides failing evidence checks.\n\nEvery chunk: read live branch → implement → add regression tests → observe CI → fix to green → mark status with exact commit → next chunk. Report separately: **committed**, **CI-tested**, **verified on Hermes**. Do not publish, send messages or repeat paid research as a test of unrelated code.
