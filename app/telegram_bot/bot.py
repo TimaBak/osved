@@ -261,9 +261,9 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             for task in TASK_DEFAULTS
         ]
         await message.answer(
-            "<b>Codex Sale · выбранные модели</b>\\n"
-            + "\\n".join(rows)
-            + "\\n\\nИзменить: <code>/model news gpt-6-luna</code>\\n"
+            "<b>Codex Sale · выбранные модели</b>\n"
+            + "\n".join(rows)
+            + "\n\nИзменить: <code>/model news gpt-6-luna</code>\n"
             + "Задачи: news, research, search, video. "
             + "Выбранные модели ещё не подключены к рабочей генерации."
         )
@@ -278,7 +278,7 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         args = (message.text or "").split()
         if len(args) != 3:
             await message.answer(
-                "Использование: <code>/model news gpt-6-luna</code>\\n"
+                "Использование: <code>/model news gpt-6-luna</code>\n"
                 "Доступные модели: " + ", ".join(TEXT_MODELS)
             )
             return
