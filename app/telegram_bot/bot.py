@@ -258,7 +258,7 @@ def build_router(settings: Settings, repository: Repository) -> Router:
 
         await message.answer(overview_text(repository), reply_markup=overview_keyboard(repository))
 
-    @router.callback_query(lambda query: bool(query.data and query.data.startswith("osved_models:")))
+    @router.callback_query(\n        lambda query: bool(query.data and query.data.startswith("osved_models:"))\n    )
     async def models_callback(query: CallbackQuery) -> None:
         user_id = query.from_user.id if query.from_user else None
         if not is_allowed(settings, repository, user_id):
