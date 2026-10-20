@@ -208,7 +208,6 @@ class VideoReportService:
             assert key is not None
             if self.settings.codex_sale_api_key and self.transport is model_transport:
                 from app.llm.codexsale import CodexSaleClient
-
                 from app.llm.model_registry import selected_model
 
                 payload = {**request, "model": selected_model(self.repository, "video")}
