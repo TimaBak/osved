@@ -1,5 +1,11 @@
 from app.pipeline.telegram_style import clean_news_html
-from app.telegram_bot.emoji_style import FALLBACK, PACKS, emoji_html, headline_role, load_custom_emoji_ids
+from app.telegram_bot.emoji_style import (
+    FALLBACK,
+    PACKS,
+    emoji_html,
+    headline_role,
+    load_custom_emoji_ids,
+)
 
 
 def test_registered_packs_and_balanced_fallback() -> None:
