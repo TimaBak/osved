@@ -26,8 +26,13 @@ class CodexSaleClient:
         if self.base_url.rstrip("/") != BASE_URL:
             raise CodexSaleError("Only the approved Codex Sale API origin is allowed")
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
+    def _request(
+        self, method: str, path: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        encoded = (
+            json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            if payload is not None else None
+        )
         request = Request(
             self.base_url.rstrip("/") + path,
             data=encoded,
