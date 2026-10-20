@@ -6,6 +6,8 @@ import pytest
 from typer.testing import CliRunner
 
 import app.cli as cli
+from pydantic import SecretStr
+
 from app.config import Settings
 from app.ops.schedule import ScheduledJobExecutor
 from tests.test_radar_feedback import discovery_delivery, repository
@@ -15,7 +17,7 @@ def test_explicit_pipeline_uses_shared_steps_and_preserves_limits(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path, allowed_user_id=123)
+    settings = Settings(_env_file=None, data_dir=tmp_path, allowed_user_id=123, codex_sale_api_key=SecretStr('test-only'))
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     calls = []
 
@@ -23,7 +25,7 @@ def test_explicit_pipeline_uses_shared_steps_and_preserves_limits(
         calls.append(("radar", provider, limit_per_source))
         return {"cost_usd": 0.01, "errors": 0}
 
-    def research(self):
+    def research(self, *, max_attempts=None):
         calls.append(("research",))
         return {"events_seen": 1, "cards_created": 1, "cost_usd": 0.02, "errors": 0}
 
@@ -62,7 +64,7 @@ def test_no_deliver_and_unsuccessful_research_stop_repeated_spend(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path)
+    settings = Settings(_env_file=None, data_dir=tmp_path, codex_sale_api_key=SecretStr('test-only'))
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     calls = []
 
@@ -135,7 +137,7 @@ def test_pipeline_real_delivery_excludes_stale_valid_and_fresh_preview(
     monkeypatch.setattr(
         ScheduledJobExecutor,
         "research",
-        lambda self: {
+        lambda self, *, max_attempts=None: {
             "events_seen": 0,
             "cards_created": 0,
             "errors": 0,
