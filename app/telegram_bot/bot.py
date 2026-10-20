@@ -251,25 +251,34 @@ def build_router(settings: Settings, repository: Repository) -> Router:
 
     @router.message(Command("models"))
     async def models_handler(message: Message) -> None:
-        if not is_allowed(settings, repository, message.from_user.id if message.from_user else None):
+        user_id = message.from_user.id if message.from_user else None
+        if not is_allowed(settings, repository, user_id):
             return
         from app.llm.model_registry import TASK_DEFAULTS, selected_model
-        rows = [f"<code>{task}</code>: <code>{selected_model(repository, task)}</code>" for task in TASK_DEFAULTS]
+
+        rows = [
+            f"<code>{task}</code>: <code>{selected_model(repository, task)}</code>"
+            for task in TASK_DEFAULTS
+        ]
         await message.answer(
-            "<b>Codex Sale · выбранные модели</b>\n" + "\n".join(rows)
-            + "\n\nИзменить: <code>/model news gpt-6-luna</code>\n"
-            + "Задачи: news, research, search, video. Изменение модели пока не подключено к генерации."
+            "<b>Codex Sale · выбранные модели</b>\\n"
+            + "\\n".join(rows)
+            + "\\n\\nИзменить: <code>/model news gpt-6-luna</code>\\n"
+            + "Задачи: news, research, search, video. "
+            + "Выбранные модели ещё не подключены к рабочей генерации."
         )
 
     @router.message(Command("model"))
     async def model_handler(message: Message) -> None:
-        if not is_allowed(settings, repository, message.from_user.id if message.from_user else None):
+        user_id = message.from_user.id if message.from_user else None
+        if not is_allowed(settings, repository, user_id):
             return
         from app.llm.model_registry import TEXT_MODELS, set_model
+
         args = (message.text or "").split()
         if len(args) != 3:
             await message.answer(
-                "Использование: <code>/model news gpt-6-luna</code>\n"
+                "Использование: <code>/model news gpt-6-luna</code>\\n"
                 "Доступные модели: " + ", ".join(TEXT_MODELS)
             )
             return
@@ -279,7 +288,8 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             await message.answer("Неизвестная задача или модель. Посмотри /models.")
             return
         await message.answer(
-            f"Настройка сохранена: <code>{args[1].lower()}</code> → <code>{args[2]}</code>. "
+            f"Настройка сохранена: <code>{args[1].lower()}</code> → "
+            f"<code>{args[2]}</code>. "
             "Подключение к рабочим AI-вызовам выполняется отдельным этапом."
         )
 
