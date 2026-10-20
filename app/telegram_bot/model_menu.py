@@ -41,7 +41,7 @@ PROVIDERS = {
 
 def provider_for(model: str) -> str:
     name = model.lower()
-    if name.startswith(("gpt-", "o1-", "o3-", "o4-", "chatgpt-")):
+    if name.startswith(("gpt-", "o1-", "o3-", "o4-", "chatgpt-", "gpt-image-")):
         return "gpt"
     if name.startswith("glm-"):
         return "glm"
