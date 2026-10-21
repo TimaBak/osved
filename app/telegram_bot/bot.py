@@ -20,6 +20,7 @@ from aiogram.types import (
     LinkPreviewOptions,
     Message,
     ReplyParameters,
+    InlineKeyboardButton,
 )
 
 from app.config import DeliveryFormat, Settings
@@ -247,7 +248,41 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             return
         if not is_allowed(settings, repository, user_id):
             return
-        await message.answer("Персональная технологическая лента готова принимать feedback.")
+        from app.ops.feed_health import feed_health, feed_health_text
+        snapshot = feed_health(repository)
+        await message.answer(
+            "<b>ОСВЕД · персональный аналитический центр</b>\n\n"
+            + feed_health_text(snapshot)
+            + "\n\nВыберите раздел ниже. Если новостей пока нет, /status покажет состояние системы.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📰 Моя лента", callback_data="osved_menu:news"),
+                 InlineKeyboardButton(text="📡 Радар", callback_data="osved_menu:radar")],
+                [InlineKeyboardButton(text="🗂 Источники", callback_data="osved_menu:sources"),
+                 InlineKeyboardButton(text="⚙️ Статус", callback_data="osved_menu:status")],
+                [InlineKeyboardButton(text="🎬 Видео и PDF", callback_data="osved_menu:media")],
+            ]),
+        )
+
+    @router.callback_query(lambda query: bool(query.data and query.data.startswith("osved_menu:")))
+    async def osved_menu_handler(query: CallbackQuery) -> None:
+        if not is_allowed(settings, repository, query.from_user.id):
+            await query.answer("Недоступно", show_alert=True)
+            return
+        section = (query.data or "").split(":", 1)[-1]
+        messages = {
+            "news": "📰 Моя лента\nИспользуйте /news для следующей новости. Если карточек нет — /status покажет состояние конвейера.",
+            "radar": "📡 Радар\nОткройте /radar для информации о поиске.",
+            "sources": "🗂 Источники\nОткройте /sources для управления источниками и /tgchannels для Telegram-каналов.",
+            "status": "⚙️ Состояние ОСВЕД\n" + feed_health_text(feed_health(repository)),
+            "media": "🎬 Медиалаб\n/videos — видео; /channels — YouTube-каналы; /report — PDF по ссылке.",
+        }
+        if section not in messages:
+            await query.answer("Неизвестный раздел", show_alert=True)
+            return
+        await query.answer()
+        if query.message:
+            await query.message.answer(messages[section])
+
 
     @router.message(Command("status"))
     async def status_handler(message: Message) -> None:
