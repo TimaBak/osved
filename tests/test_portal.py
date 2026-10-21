@@ -101,3 +101,50 @@ def test_portal_host_restrictions(tmp_path):
             await client.close()
 
     asyncio.run(exercise())
+
+
+
+def test_portal_accepts_only_persisted_telegram_owner_without_env_allowlist(tmp_path):
+    async def exercise():
+        settings, repo, _ = fixture(tmp_path)
+        settings.allowed_user_id = None
+        settings.telegram_bot_token = SecretStr(BOT_TOKEN)
+        repo.set_runtime_setting("allowed_user_id", "123")
+        client = TestClient(TestServer(create_portal(settings, repo)))
+        await client.start_server()
+        try:
+            outsider = await client.post(
+                "/api/session",
+                json={"init_data": signed_data(456, int(time.time()))},
+            )
+            assert outsider.status == 401
+
+            rightful_owner = await client.post(
+                "/api/session",
+                json={"init_data": signed_data(123, int(time.time()))},
+            )
+            assert rightful_owner.status == 200
+        finally:
+            await client.close()
+
+    asyncio.run(exercise())
+
+
+def test_portal_does_not_claim_owner_from_unconfigured_web_login(tmp_path):
+    async def exercise():
+        settings, repo, _ = fixture(tmp_path)
+        settings.allowed_user_id = None
+        settings.telegram_bot_token = SecretStr(BOT_TOKEN)
+        client = TestClient(TestServer(create_portal(settings, repo)))
+        await client.start_server()
+        try:
+            response = await client.post(
+                "/api/session",
+                json={"init_data": signed_data(123, int(time.time()))},
+            )
+            assert response.status == 503
+            assert repo.get_runtime_setting("allowed_user_id") is None
+        finally:
+            await client.close()
+
+    asyncio.run(exercise())
