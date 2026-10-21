@@ -361,7 +361,8 @@ def test_superreaction_back_silent_and_comment_all_preserve_details_button() -> 
             FeedbackCallback(delivery_id=7, action=FeedbackAction.SUPERDISLIKE),
         )
     )
-    assert [row[0].text for row in choose.message.reply_markup.inline_keyboard][-1] == ("📖 Подробнее")
+    labels = [row[0].text for row in choose.message.reply_markup.inline_keyboard]
+    assert labels[-1] == "📖 Подробнее"
 
     back = FakeCallbackQuery(repository.calls)
     asyncio.run(
