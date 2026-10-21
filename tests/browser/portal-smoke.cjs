@@ -63,6 +63,13 @@ const { chromium } = require("playwright");
         sources:[{title:"Источник",url:"https://example.org/article"}],
       }}),
     }));
+    await page.route("**/api/reader/news/1", route => route.fulfill({
+      status: 200, contentType:"application/json",
+      body: JSON.stringify({
+        kind:"news",id:1,note:"Проверить независимый источник",
+        is_read:true,updated_at:"2026-10-22T00:00:00Z",
+      }),
+    }));
     await page.route("**/api/radar/2", route => route.fulfill({
       status: 200,contentType:"application/json",
       body: JSON.stringify({item:{
@@ -103,9 +110,17 @@ const { chromium } = require("playwright");
     await page.locator("#search").fill("");
     await page.locator("#content .primary-button").first().click();
     await page.getByText("Полный проверенный материал",{exact:false}).waitFor({state:"visible"});
+    await page.locator("#reader-note-text").fill("Проверить независимый источник");
+    await page.locator("#reader-is-read").check();
+    await page.getByRole("button",{name:"Сохранить заметку"}).click();
+    await page.getByText("Заметка сохранена.").waitFor({state:"visible"});
     assert.equal(await page.locator("#dialog-overlay").isVisible(),true);
     await page.locator("#dialog-close").click();
     assert.equal(await page.locator("#dialog-overlay").isVisible(),false);
+    await page.locator('[data-section="notebook"]').click();
+    await page.getByText("Проверить независимый источник").waitFor({state:"visible"});
+    await page.locator('[data-section="briefing"]').click();
+    await page.getByText("Картина наблюдения").waitFor({state:"visible"});
     await page.locator('[data-section="media"]').click();
     await page.locator("#youtube-url").fill("https://www.youtube.com/watch?v=ABCDEFGHIjk");
     await page.locator("#youtube-form .primary-button").click();

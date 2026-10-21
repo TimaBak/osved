@@ -20,6 +20,8 @@ const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
   feed:["Моя лента","Проверенные материалы, подробности и первоисточники."],
   radar:["Радар событий","Публикации на этапе сбора и проверки фактов."],
+  briefing:["Русская сводка","Краткая картина событий на русском языке с подтверждённым статусом каждого материала."],
+  notebook:["Мои заметки","Личный исследовательский архив: комментарии и прочитанные материалы."],
   saved:["Избранное","Сохранённые материалы из кабинета и Telegram."],
   sources:["Источники","Твой реестр наблюдения и включённые каналы."],
   media:["Медиалаб","Видео YouTube, расшифровки и смысловые выжимки."],
@@ -107,12 +109,56 @@ function external(url,title){
   }catch(_){return null;}
 }
 const sourceName=x=>x.source_name||x.source||"Первоисточник";
+function readingState(kind,id){
+  const rows=Array.isArray(state.data?.reading)?state.data.reading:[];
+  return rows.find(row=>row.kind===kind&&row.id===id)||
+    {kind,id,note:"",is_read:false,updated_at:null};
+}
+function storeReading(entry){
+  if(!Array.isArray(state.data?.reading))state.data.reading=[];
+  const rows=state.data.reading;
+  const index=rows.findIndex(row=>row.kind===entry.kind&&row.id===entry.id);
+  if(index<0)rows.push(entry);else rows[index]=entry;
+}
+function containsCyrillic(text){
+  return /[А-Яа-яЁё]/.test(String(text||""));
+}
+function readingPanel(item,kind){
+  const panel=el("section","reader-note-panel");
+  panel.append(el("h3","","Исследовательские заметки"));
+  panel.append(el("p","caption","Заметка сохраняется в личной базе ОСВЕД, доступной только владельцу."));
+  const form=el("form","reader-note-form");
+  const area=el("textarea");area.id="reader-note-text";area.maxLength=4000;
+  area.placeholder="Главная мысль, вопросы, что проверить позже…";
+  const row=el("label","reader-check");
+  const checkbox=el("input");checkbox.type="checkbox";checkbox.id="reader-is-read";
+  row.append(checkbox,el("span","","Материал прочитан"));
+  const status=el("p","caption");status.setAttribute("role","status");
+  const button=el("button","primary-button","Сохранить заметку");button.type="submit";
+  form.append(area,row,button,status);panel.append(form);
+  const previous=readingState(kind,item.id);
+  area.value=previous.note||"";checkbox.checked=Boolean(previous.is_read);
+  form.addEventListener("submit",async event=>{
+    event.preventDefault();button.disabled=true;status.textContent="Сохраняю…";
+    try{
+      const result=await api("/api/reader/"+kind+"/"+item.id,{
+        method:"POST",body:JSON.stringify({note:area.value,is_read:checkbox.checked})
+      });
+      storeReading(result);status.textContent="Заметка сохранена.";
+    }catch(error){status.textContent=friendly(error);}
+    finally{button.disabled=false;}
+  });
+  return panel;
+}
 function card(item,kind){
   const type=kind==="radar"?"radar":item.kind||"news";
   const node=el("article","tile");
   const head=el("div","kicker");
   head.append(el("span","",type==="radar"?"СИГНАЛ ИСТОЧНИКА":type==="video"?"МЕДИАЛАБ":"РЕДАКЦИОННЫЙ МАТЕРИАЛ"));
   if(type==="radar")head.append(pill("НЕ ПРОВЕРЕНО","unverified"));
+  if(item.language==="original")head.append(pill("ИНОСТРАННЫЙ ОРИГИНАЛ","tag off"));
+  const note=readingState(type,item.id);
+  if(note.is_read)head.append(pill("ПРОЧИТАНО","tag"));
   node.append(head,el("h2","",item.title||"Без заголовка"));
   if(item.summary||item.source||item.source_name){
     node.append(el("p","",item.summary||sourceName(item)));
@@ -177,7 +223,7 @@ function render(){
   const note=(title,message)=>root.append(empty(title,message));
   const section=state.section;
   $("#result-count").textContent=String(
-    section==="feed"?news.length:section==="radar"?signals.length:section==="saved"?saved.length:section==="sources"?streams.length:news.length+signals.length
+    section==="feed"?news.length:section==="radar"?signals.length:section==="saved"?saved.length:section==="sources"?streams.length:section==="notebook"?(state.data.reading||[]).filter(x=>x.note||x.is_read).length:news.length+signals.length
   )+" материалов / объектов";
   if(section==="overview"){
     if(!news.length)note("Информационная картина","Проверенные публикации ещё не готовы. Ниже доступны сигналы из реальных источников. Это не готовые новости.");
@@ -198,6 +244,46 @@ function render(){
   }else if(section==="radar"){
     if(!signals.length)note("Радар пока пуст","Новые сигналы появятся после следующего сбора источников.");
     else add(signals,"radar");
+  }else if(section==="briefing"){
+    const russianNews=filter(news.filter(x=>x.language!=="original"));
+    const russianRadar=filter(signals.filter(x=>x.language!=="original"));
+    const foreign=filter([...news,...signals].filter(x=>x.language==="original"));
+    const panel=el("section","briefing-panel");
+    panel.append(el("span","eyebrow","РУССКОЯЗЫЧНЫЙ ОБЗОР / ПРОВЕРЕННЫЕ ДАННЫЕ"));
+    panel.append(el("h2","","Картина наблюдения"));
+    panel.append(el("p","","Проверенных материалов: "+news.length+
+      " · Сигналов в проверке: "+signals.length+
+      " · Источников активно: "+streams.filter(x=>x.enabled).length+
+      ". Сводка составлена из существующих данных — без выдуманного перевода и AI-выводов."));
+    panel.append(el("p","caption","Оригиналы на других языках сохраняются с явной пометкой. Их полноценный перевод станет доступен после настройки модели и контроля качества."));
+    $("#section-tools").append(panel);
+    root.append(el("div","statusline","ПРОВЕРЕННЫЕ МАТЕРИАЛЫ · РУССКАЯ РЕДАКЦИЯ"));
+    if(russianNews.length)add(russianNews,"feed");
+    else note("Проверенных русскоязычных статей пока нет","Публикации появятся после прохождения фактчекинга и проверки языка.");
+    root.append(el("div","statusline","РУССКОЯЗЫЧНЫЕ СИГНАЛЫ · НЕПРОВЕРЕННЫЕ"));
+    if(russianRadar.length)add(russianRadar,"radar");
+    else note("Русскоязычных сигналов пока нет","Система не переводит иностранные заголовки по догадке.");
+    if(foreign.length){
+      root.append(el("div","statusline","ИНОСТРАННЫЕ ОРИГИНАЛЫ · БЕЗ АВТОПЕРЕВОДА"));
+      foreign.slice(0,12).forEach(x=>root.append(card(x,x.kind||"radar")));
+    }
+  }else if(section==="notebook"){
+    const notes=(Array.isArray(state.data.reading)?state.data.reading:[])
+      .filter(x=>x.note||x.is_read);
+    if(!notes.length)note("Исследовательский архив пуст","Открой любой материал, впиши заметку или отметь как прочитанный. Все записи сохраняются на сервере.");
+    for(const entry of notes){
+      const item=[...news,...video,...signals].find(x=>x.kind===entry.kind&&x.id===entry.id)||
+        {kind:entry.kind,id:entry.id,title:"Материал №"+entry.id,summary:"Материал не входит в текущую выборку ленты."};
+      if(state.query&&!matches({...item,summary:entry.note}))continue;
+      const cardNode=el("article","tile");
+      cardNode.append(el("div","kicker",entry.is_read?"ПРОЧИТАНО":"В ЗАМЕТКАХ"));
+      cardNode.append(el("h2","",item.title));
+      cardNode.append(el("p","",entry.note||"Без заметки — отмечено как прочитанное."));
+      cardNode.append(el("span","tile-meta",entry.updated_at||""));
+      const actions=el("div","tile-actions");
+      actions.append(action("Читать и изменить","note",()=>openArticle(item,entry.kind),"primary-button"));
+      cardNode.append(actions);root.append(cardNode);
+    }
   }else if(section==="saved"){
     if(!saved.length)note("Сохранений пока нет","В ленте нажми «Сохранить» на нужном материале.");
     else add(saved,"feed");
@@ -283,6 +369,13 @@ async function openArticle(item,kind){
     if(!content.article&&kind==="news"){
       body.append(el("p","caption","Полная расширенная статья пока не подготовлена. Выше — сохранённый материал ОСВЕД."));
     }
+    if((detail.language||item.language)==="original"||
+       (!containsCyrillic(detail.title)&&!containsCyrillic(detail.summary))){
+      const info=el("p","language-notice",
+        "Материал сохранён на языке первоисточника. Достоверный перевод на русский пока недоступен: ОСВЕД не подменяет его догадками.");
+      body.prepend(info);
+    }
+    body.append(readingPanel(detail,kind));
     showDialog({...detail,kind},body);
   }catch(error){
     body.replaceChildren(el("p","",friendly(error)+" Открой исходную публикацию через ссылку на карточке."));
