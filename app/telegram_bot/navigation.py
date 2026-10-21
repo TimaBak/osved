@@ -5,12 +5,16 @@ All callback names stay below Telegram's 64-byte limit.
 """
 from __future__ import annotations
 
+import html
+
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
 )
+
+from app.web.content import public_url
 
 LABELS = {
     "home": "🏠 Главная",
@@ -34,6 +38,7 @@ PRIMARY = (
     ("sources", "topics"),
     ("favorites", "media"),
     ("settings", "home"),
+    ("site",),
 )
 HOME_INLINE = (
     ("feed", "radar"),
@@ -91,3 +96,35 @@ def parse_section(value: str | None) -> str | None:
         return None
     section = value.removeprefix("osved_menu:")
     return section if section in LABELS else None
+
+def radar_preview(repository, limit: int = 6) -> tuple[str, InlineKeyboardMarkup | None]:
+    """Expose actual *unverified* candidates without fabricating news."""
+    with repository.connection() as db:
+        rows = db.execute(
+            """SELECT e.headline, si.source_url, s.name AS source_name
+            FROM events e
+            JOIN source_items si ON si.id=e.primary_source_item_id
+            JOIN sources s ON s.id=si.source_id
+            WHERE e.status='candidate'
+            ORDER BY e.latest_source_at DESC, e.id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    if not rows:
+        return ("📡 Новых сигналов пока нет. Проверенные новости появятся в ленте.", None)
+    lines = [
+        "<b>📡 Последние сигналы</b>",
+        "<i>Ещё не прошли проверку фактов. Это не готовые новости.</i>",
+    ]
+    actions = []
+    for i, row in enumerate(rows, 1):
+        lines.append(
+            f"\n{i}. <b>{html.escape(str(row['headline'])[:170])}</b>"
+            f"\n   {html.escape(str(row['source_name'])[:70])}"
+        )
+        url = public_url(row["source_url"])
+        if url:
+            actions.append([InlineKeyboardButton(text=f"Источник {i} ↗", url=url)])
+    actions.append(
+        [InlineKeyboardButton(text="🏠 Главная", callback_data="osved_menu:home")]
+    )
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=actions)
