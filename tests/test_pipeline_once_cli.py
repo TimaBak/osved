@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 from typer.testing import CliRunner
 
 import app.cli as cli
@@ -15,7 +16,10 @@ def test_explicit_pipeline_uses_shared_steps_and_preserves_limits(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path, allowed_user_id=123)
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, allowed_user_id=123,
+        codex_sale_api_key=SecretStr('test-only'),
+    )
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     calls = []
 
@@ -23,7 +27,7 @@ def test_explicit_pipeline_uses_shared_steps_and_preserves_limits(
         calls.append(("radar", provider, limit_per_source))
         return {"cost_usd": 0.01, "errors": 0}
 
-    def research(self):
+    def research(self, *, max_attempts=None):
         calls.append(("research",))
         return {"events_seen": 1, "cards_created": 1, "cost_usd": 0.02, "errors": 0}
 
@@ -62,11 +66,13 @@ def test_no_deliver_and_unsuccessful_research_stop_repeated_spend(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path)
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, codex_sale_api_key=SecretStr('test-only'),
+    )
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     calls = []
 
-    def research(self):
+    def research(self, *, max_attempts=None):
         calls.append("research")
         return {"events_seen": 1, "cards_created": 0, "errors": 0, "cost_usd": 0.03}
 
@@ -88,10 +94,12 @@ def test_no_deliver_and_unsuccessful_research_stop_repeated_spend(
 
 def test_pipeline_failure_is_accounted_and_delivery_is_skipped(tmp_path: Path, monkeypatch) -> None:
     repo = repository(tmp_path)
-    settings = Settings(_env_file=None, data_dir=tmp_path)
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, codex_sale_api_key=SecretStr('test-only'),
+    )
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
 
-    def research(self):
+    def research(self, *, max_attempts=None):
         repo.record_usage("test", "research", cost_usd=0.04)
         raise RuntimeError("local persistence failed")
 
@@ -113,7 +121,10 @@ def test_pipeline_real_delivery_excludes_stale_valid_and_fresh_preview(
 ) -> None:
     repo = repository(tmp_path)
     repo.set_runtime_setting("scheduled_video_recommendations_enabled", "false")
-    settings = Settings(_env_file=None, data_dir=tmp_path, allowed_user_id=123)
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, allowed_user_id=123,
+        codex_sale_api_key=SecretStr('test-only'),
+    )
     monkeypatch.setattr(cli, "bootstrap", lambda: (settings, repo))
     discovery_delivery(repo, index=1)
     discovery_delivery(repo, index=2)
@@ -135,7 +146,7 @@ def test_pipeline_real_delivery_excludes_stale_valid_and_fresh_preview(
     monkeypatch.setattr(
         ScheduledJobExecutor,
         "research",
-        lambda self: {
+        lambda self, *, max_attempts=None: {
             "events_seen": 0,
             "cards_created": 0,
             "errors": 0,

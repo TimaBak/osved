@@ -42,7 +42,7 @@ def test_fresh_public_install_has_no_subscriptions_or_paid_background_jobs(tmp_p
     assert result.exit_code == 0, result.output
     report = json.loads(result.output)
     assert not any(report["credentials"].values())
-    assert report["storage"]["sources"] == 0
+    assert report["storage"]["sources"] == 5
     settings, repository = cli.bootstrap()
     assert repository.get_runtime_setting("news_delivery_mode") == "hybrid"
     calls = []
@@ -63,10 +63,10 @@ def test_owner_added_channel_survives_neutral_config_restart(tmp_path, monkeypat
     added = add_channel(settings, repository, channel, 123)
     _, restarted = cli.bootstrap()
     sources = runtime_source_registry(settings).sources
-    assert len(sources) == 1
-    assert sources[0].id == added["source_id"]
-    assert sources[0].locator == "friends_channel"
-    assert restarted.status_counts()["sources"] == 1
+    assert len(sources) == 6
+    assert any(source.id == added["source_id"] for source in sources)
+    assert any(source.locator == "friends_channel" for source in sources)
+    assert restarted.status_counts()["sources"] == 6
 
 
 def test_owner_schedule_uses_local_date_across_utc_midnight():

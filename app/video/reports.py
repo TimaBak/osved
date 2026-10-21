@@ -195,15 +195,27 @@ class VideoReportService:
                 raise ReportError("uncertain")
             # Also closes a crash between saving the rejection and settling it.
             self._settle(previous["ledger_id"], 0.0, rejected_usage)
-        if self.settings.openrouter_api_key is None:
+        if self.settings.codex_sale_api_key is None and self.settings.openrouter_api_key is None:
             raise ReportError("disabled")
-        ledger_id = self._reserve("openrouter", reserve, video, operation=operation)
+        provider = "codexsale" if self.settings.codex_sale_api_key else "openrouter"
+        ledger_id = self._reserve(provider, reserve, video, operation=operation)
         marker = {"ledger_id": ledger_id, "reserve_usd": reserve}
         save_json(directory / "request.json", request)
         save_json(started, marker)
         report_progress(progress, "writing")
         try:
-            response = self.transport(request, self.settings.openrouter_api_key.get_secret_value())
+            key = self.settings.codex_sale_api_key or self.settings.openrouter_api_key
+            assert key is not None
+            if self.settings.codex_sale_api_key and self.transport is model_transport:
+                from app.llm.codexsale import CodexSaleClient
+                from app.llm.model_registry import selected_model
+
+                payload = {**request, "model": selected_model(self.repository, "video")}
+                response = CodexSaleClient(key.get_secret_value(), timeout=300).chat(
+                    model=payload.pop("model"), messages=payload.pop("messages"), **payload
+                )
+            else:
+                response = self.transport(request, key.get_secret_value())
         except Exception as exc:
             http_status = exc.code if isinstance(exc, HTTPError) else None
             rejected = http_status == 402
@@ -334,7 +346,7 @@ class VideoReportService:
                     and self.settings.video_report_max_cost_usd < TRANSCRIPT_COST
                 ):
                     raise ReportError("budget_blocked")
-                if self.settings.openrouter_api_key is None:
+                if not (self.settings.codex_sale_api_key or self.settings.openrouter_api_key):
                     raise ReportError("disabled")
                 report_progress(progress, "transcript")
                 source = self._transcript(video)
@@ -363,8 +375,7 @@ class VideoReportService:
                 choice = response.get("choices", [{}])[0]
                 original = choice.get("message", {}).get("content")
                 if (
-                    response.get("model") != MODEL
-                    or choice.get("finish_reason") != "stop"
+                    choice.get("finish_reason") not in {"stop", "end_turn"}
                     or not isinstance(original, str)
                     or not original.strip()
                 ):
@@ -374,7 +385,9 @@ class VideoReportService:
                 (directory / "report.md").write_text(rendered, encoding="utf-8")
                 pdf = directory / "report.pdf"
                 report_progress(progress, "pdf")
-                audit = create_pdf(pdf, original, source)
+                audit = create_pdf(
+                    pdf, original, source, model=str(response.get("model") or MODEL)
+                )
                 assert (directory / "original.md").read_text() == original
                 audit.update(
                     input_sha256=source["input_sha256"],
@@ -437,7 +450,7 @@ class VideoReportService:
                 report_progress(progress, "cache")
                 return cached
             try:
-                if self.settings.openrouter_api_key is None:
+                if not (self.settings.codex_sale_api_key or self.settings.openrouter_api_key):
                     raise ReportError("disabled")
                 if (
                     self.settings.video_report_budget_enabled
@@ -474,7 +487,7 @@ class VideoReportService:
                 report_progress(progress, "formatting")
                 choice = response.get("choices", [{}])[0]
                 original = choice.get("message", {}).get("content")
-                if response.get("model") != MODEL or choice.get("finish_reason") != "stop":
+                if choice.get("finish_reason") not in {"stop", "end_turn"}:
                     raise ReportError("invalid_output")
                 text = extract_tldr(original)
                 save_json(

@@ -229,6 +229,181 @@ def build_router(settings: Settings, repository: Repository) -> Router:
     register_channel_handlers(router, settings, repository)
     register_video_report_handlers(router, settings, repository)
 
+    def home_screen() -> tuple[str, InlineKeyboardMarkup]:
+        from aiogram.types import InlineKeyboardButton
+
+        buttons = [
+            [InlineKeyboardButton(text="📰 Новости", callback_data="osved_nav:news"),
+             InlineKeyboardButton(text="🧬 Биографии", callback_data="osved_nav:bio")],
+            [InlineKeyboardButton(text="🔎 Поиск и исследования",
+                 callback_data="osved_nav:research")],
+            [InlineKeyboardButton(text="🎬 Видео и PDF", callback_data="osved_nav:video")],
+            [InlineKeyboardButton(text="⚙️ Модели и провайдеры",
+                 callback_data="osved_nav:models")],
+            [InlineKeyboardButton(text="📊 Статус", callback_data="osved_nav:status"),
+             InlineKeyboardButton(text="❔ Помощь", callback_data="osved_nav:help")],
+        ]
+        return (
+            "<b>ОСВЕД · Главная</b>\n\n"
+            "Личный центр новостей, анализа и видео. Выбирай раздел кнопками.",
+            InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+
+    def nav_back() -> InlineKeyboardMarkup:
+        from aiogram.types import InlineKeyboardButton
+
+        return InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")
+        ]])
+
+    @router.callback_query(
+        lambda query: bool(query.data and query.data.startswith("osved_nav:"))
+    )
+    async def navigation_callback(query: CallbackQuery) -> None:
+        if not is_allowed(settings, repository, query.from_user.id):
+            await query.answer("Нет доступа", show_alert=True)
+            return
+        if query.message is None:
+            await query.answer()
+            return
+        page = (query.data or "").removeprefix("osved_nav:")
+        from aiogram.types import InlineKeyboardButton
+
+        if page == "models":
+            from app.telegram_bot.model_menu import overview_keyboard, overview_text
+
+            text, keyboard = overview_text(repository), overview_keyboard(repository)
+        elif page == "home":
+            text, keyboard = home_screen()
+        elif page == "status":
+            text = "<b>📊 Состояние ОСВЕД</b>\n\nВыбери, что проверить:"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="📋 Подробный статус", callback_data="osved_nav:status_detail"
+                )],
+                [InlineKeyboardButton(
+                    text="📡 Радар и источники", callback_data="osved_nav:radar"
+                )],
+                [InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "status_detail":
+            import html as html_module
+
+            counts = repository.status_counts()
+            credentials = settings.credential_status()
+            rows = ["<b>📋 Статус ОСВЕД</b>", ""]
+            for key in ("sources", "enabled_sources", "events", "valid_cards",
+                        "sent_deliveries", "month_cost_usd"):
+                rows.append(f"{key}: {html_module.escape(str(counts.get(key, 0)))}")
+            rows.append("")
+            rows.append("Интеграции:")
+            for key in ("telegram_bot", "codexsale", "monid", "telegram_reader"):
+                rows.append(f"{key}: {'✅' if credentials.get(key) else '—'}")
+            text = "\n".join(rows)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Обновить", callback_data="osved_nav:status_detail")],
+                [InlineKeyboardButton(text="← Состояние", callback_data="osved_nav:status")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "radar":
+            from app.telegram_bot.sensory import radar_status_text
+
+            text = radar_status_text(repository)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Обновить", callback_data="osved_nav:radar")],
+                [InlineKeyboardButton(text="📡 Источники", callback_data="osved_nav:sources")],
+                [InlineKeyboardButton(text="← Состояние", callback_data="osved_nav:status")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "sources":
+            from app.telegram_bot.sensory import source_menu
+
+            text, existing = source_menu(repository)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                *existing.inline_keyboard,
+                [InlineKeyboardButton(text="← К радару", callback_data="osved_nav:radar")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "news":
+            text = (
+                "<b>📰 Новости</b>\n\n"
+                "Источников пока нет. Добавь Telegram-канал или YouTube-канал "
+                "по ссылке, затем проверь радар. RSS и Reddit требуют настройки YAML."
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="➕ Telegram-канал", callback_data="osved_nav:add_telegram"
+                )],
+                [InlineKeyboardButton(
+                    text="➕ YouTube-канал", callback_data="osved_nav:add_youtube"
+                )],
+                [InlineKeyboardButton(
+                    text="📡 Мои источники", callback_data="osved_nav:sources"
+                )],
+                [InlineKeyboardButton(
+                    text="📊 Радар", callback_data="osved_nav:radar"
+                )],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page in {"add_telegram", "add_youtube"}:
+            if page == "add_telegram":
+                text = (
+                    "<b>➕ Telegram-канал</b>\n\n"
+                    "Пришли публичную ссылку t.me/название или @название "
+                    "обычным сообщением. ОСВЕД распознает её и предложит добавить канал. "
+                    "Для прямого чтения некоторых каналов понадобится Telegram Reader."
+                )
+            else:
+                text = (
+                    "<b>➕ Канал YouTube</b>\n\n"
+                    "Пришли ссылку на канал (youtube.com/@имя) "
+                    "обычным сообщением. Это добавит его в радар; "
+                    "ссылка на отдельный ролик создаёт резюме, а не подписку."
+                )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="← Новости", callback_data="osved_nav:news")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        elif page == "video":
+            text = "<b>🎬 Видео и PDF</b>\n\nВыбери формат отчёта:"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="📄 Подробный PDF", callback_data="osved_nav:video_pdf"
+                )],
+                [InlineKeyboardButton(
+                    text="📝 Короткое резюме", callback_data="osved_nav:video_tldr"
+                )],
+                [InlineKeyboardButton(text="← Главная", callback_data="osved_nav:home")],
+            ])
+        elif page in {"video_pdf", "video_tldr"}:
+            kind = "pdf" if page == "video_pdf" else "tldr"
+            repository.set_runtime_setting(f"osved.video.next:{query.from_user.id}", kind)
+            text = (
+                "<b>📄 PDF</b>\n\n" if kind == "pdf"
+                else "<b>📝 Краткий пересказ</b>\n\n"
+            ) + "Теперь отправь ссылку на одно видео YouTube обычным сообщением."
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="← К видео", callback_data="osved_nav:video")],
+                [InlineKeyboardButton(text="⌂ Главная", callback_data="osved_nav:home")],
+            ])
+        else:
+            pages = {
+                "news": "<b>📰 Новости</b>\n\nИсточники и очередь пока пусты.",
+                "bio": "<b>🧬 Биографии</b>\n\nМатериалы появятся после сбора новостей.",
+                "research": "<b>🔎 Исследования</b>\n\nПока нет проверенных событий.",
+                "help": "<b>❔ Помощь</b>\n\nОткрой раздел и следуй кнопкам.",
+            }
+            if page not in pages:
+                await query.answer("Неизвестный раздел", show_alert=True)
+                return
+            text, keyboard = pages[page], nav_back()
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard)
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
+        await query.answer()
+
     @router.message(Command("start"))
     async def start_handler(message: Message) -> None:
         user_id = message.from_user.id if message.from_user else None
@@ -247,7 +422,122 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             return
         if not is_allowed(settings, repository, user_id):
             return
-        await message.answer("Персональная технологическая лента готова принимать feedback.")
+        text, keyboard = home_screen()
+        await message.answer(text, reply_markup=keyboard)
+
+    def load_models() -> list[dict]:
+        from app.llm.codexsale import CodexSaleClient, CodexSaleError
+
+        if settings.codex_sale_api_key is None:
+            return []
+        try:
+            return CodexSaleClient(
+                settings.codex_sale_api_key.get_secret_value(), timeout=12
+            ).models()
+        except CodexSaleError:
+            logger.warning("Unable to refresh Codex Sale model list")
+            return []
+
+    @router.message(Command("menu"))
+    async def menu_handler(message: Message) -> None:
+        user_id = message.from_user.id if message.from_user else None
+        if not is_allowed(settings, repository, user_id):
+            return
+        text, keyboard = home_screen()
+        await message.answer(text, reply_markup=keyboard)
+
+    @router.message(Command("models"))
+    async def models_handler(message: Message) -> None:
+        user_id = message.from_user.id if message.from_user else None
+        if not is_allowed(settings, repository, user_id):
+            return
+        from app.telegram_bot.model_menu import overview_keyboard, overview_text
+
+        await message.answer(
+            overview_text(repository), reply_markup=overview_keyboard(repository)
+        )
+
+    @router.callback_query(
+        lambda query: bool(query.data and query.data.startswith("osved_models:"))
+    )
+    async def models_callback(query: CallbackQuery) -> None:
+        user_id = query.from_user.id if query.from_user else None
+        if not is_allowed(settings, repository, user_id):
+            await query.answer("Нет доступа", show_alert=True)
+            return
+        if query.message is None:
+            await query.answer()
+            return
+        from app.llm.model_registry import TASK_DEFAULTS, set_model
+        from app.telegram_bot.model_menu import (
+            PREFIX,
+            available_models,
+            overview_keyboard,
+            overview_text,
+            provider_keyboard,
+            provider_text,
+            selection_keyboard,
+            selection_text,
+        )
+
+        parts = (query.data or "")[len(PREFIX):].split(":")
+        action = parts[0]
+        if action in {"noop", "unavailable"}:
+            await query.answer()
+            return
+        if action == "monid":
+            text = ("<b>🎙 Monid</b>\n\nMonid уже используется для получения "
+                    "расшифровок YouTube. Это внешний источник, а не модель Codex Sale. "
+                    "Переключатель маршрута аудиофайлов пока не реализован.")
+            from aiogram.types import InlineKeyboardButton
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="← К аудио", callback_data=f"{PREFIX}task:audio")
+            ]])
+        elif action == "home":
+            text = overview_text(repository)
+            keyboard = overview_keyboard(repository)
+        elif action == "task" and len(parts) == 2 and parts[1] in TASK_DEFAULTS:
+            task = parts[1]
+            catalog = await asyncio.to_thread(load_models)
+            text = provider_text(repository, task)
+            keyboard = provider_keyboard(catalog, task)
+        elif action == "provider" and len(parts) == 4 and parts[1] in TASK_DEFAULTS:
+            task, provider = parts[1], parts[2]
+            try:
+                page = int(parts[3])
+            except ValueError:
+                await query.answer("Неверная страница", show_alert=True)
+                return
+            catalog = await asyncio.to_thread(load_models)
+            text = selection_text(repository, task, provider)
+            keyboard = selection_keyboard(repository, task, provider, page, catalog)
+        elif action == "set" and len(parts) == 3 and parts[1] in TASK_DEFAULTS:
+            task, model = parts[1], parts[2]
+            catalog = await asyncio.to_thread(load_models)
+            approved = {str(item["id"]) for item in available_models(catalog, task)}
+            if model not in approved:
+                await query.answer("Модель недоступна в каталоге", show_alert=True)
+                return
+            set_model(repository, task, model, allowed=approved)
+            text = provider_text(repository, task)
+            keyboard = provider_keyboard(catalog, task)
+        else:
+            await query.answer("Неизвестное действие", show_alert=True)
+            return
+        try:
+            await query.message.edit_text(text, reply_markup=keyboard)
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
+        await query.answer("Модель сохранена" if action == "set" else None)
+
+    @router.message(Command("model"))
+    async def model_handler(message: Message) -> None:
+        user_id = message.from_user.id if message.from_user else None
+        if not is_allowed(settings, repository, user_id):
+            return
+        await message.answer("Выбор моделей доступен через /models — кнопками.")
 
     @router.message(Command("status"))
     async def status_handler(message: Message) -> None:
@@ -713,6 +1003,8 @@ async def run_bot(settings: Settings, repository: Repository) -> None:
                 BotCommand(command="help", description="Как пользоваться ОСВЕД"),
                 BotCommand(command="bio", description="Ежедневные биографии: статус и пауза"),
                 BotCommand(command="news", description="Получить ещё свежие новости"),
+                BotCommand(command="models", description="Модели Codex Sale"),
+                BotCommand(command="model", description="Выбрать модель для задачи"),
                 BotCommand(command="radar", description="Состояние радара и расходы"),
                 BotCommand(command="sources", description="Включить или выключить источники"),
                 BotCommand(command="tgchannels", description="Мои Telegram-каналы для радара"),

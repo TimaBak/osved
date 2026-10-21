@@ -77,6 +77,9 @@ class _NewsHTML(HTMLParser):
             if valid and not any(t == "a" for _, t in self.stack):
                 emitted = "a"
                 self.parts.append(f'<a href="{html.escape(url, quote=True)}">')
+        elif tag == "tg-emoji" and re.fullmatch(r"[0-9]{6,30}", attrs.get("emoji-id") or ""):
+            emitted = "tg-emoji"
+            self.parts.append(f'<tg-emoji emoji-id="{attrs["emoji-id"]}">')
         elif tag in {"b", "strong", "code", "pre", "blockquote"}:
             emitted = "b" if tag == "strong" else tag
             self.parts.append(f"<{emitted}>")

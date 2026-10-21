@@ -4,6 +4,7 @@ import hashlib
 import html
 import json
 import re
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -79,6 +80,20 @@ def fetch_feed(source: SourceConfig) -> bytes:
         raise RSSCollectorError(f"RSS network error for {source.id}: {exc.reason}") from exc
     if len(payload) > MAX_FEED_BYTES:
         raise RSSCollectorError(f"Feed exceeds {MAX_FEED_BYTES} bytes")
+    # Some origins return gzip even without Accept-Encoding. Decode with a strict
+    # inflated-size cap; never feed compressed bytes to the XML parser.
+    if payload.startswith(b"\x1f\x8b"):
+        try:
+            decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            plain = decoder.decompress(payload, MAX_FEED_BYTES + 1)
+            if len(plain) > MAX_FEED_BYTES or decoder.unconsumed_tail:
+                raise RSSCollectorError("Decompressed RSS exceeds size limit")
+            plain += decoder.flush(MAX_FEED_BYTES + 1 - len(plain))
+            if len(plain) > MAX_FEED_BYTES or not decoder.eof:
+                raise RSSCollectorError("Invalid or oversized compressed RSS")
+            payload = plain
+        except zlib.error as exc:
+            raise RSSCollectorError("Invalid gzip RSS response") from exc
     return payload
 
 

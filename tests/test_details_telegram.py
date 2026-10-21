@@ -217,7 +217,7 @@ def test_details_callback_enqueues_and_answers_before_telegram_markup_edit() -> 
 
     assert repository.calls == ["enqueue", "answer", "edit"]
     assert query.answers == [("Собираю подробный разбор", False)]
-    assert query.message.reply_markup.inline_keyboard[1][0].text == "Разбор готовится…"
+    assert query.message.reply_markup.inline_keyboard[1][0].text == "⏳ Разбор готовится…"
 
 
 def test_details_callback_rejects_a_foreign_or_stale_message() -> None:
@@ -261,7 +261,7 @@ def test_details_callback_preserves_pending_superreaction_controls() -> None:
         "💬 Прокомментировать",
         "✅ Отправить молча",
         "↩️ Назад",
-        "Разбор готовится…",
+        "⏳ Разбор готовится…",
     ]
 
 
@@ -286,7 +286,7 @@ def test_failed_details_require_an_explicit_retry_click() -> None:
     asyncio.run(handler(query, DetailsCallback(delivery_id=7)))
 
     assert repository.calls == ["retry", "answer", "edit"]
-    assert query.message.reply_markup.inline_keyboard[1][0].text == "Разбор готовится…"
+    assert query.message.reply_markup.inline_keyboard[1][0].text == "⏳ Разбор готовится…"
 
 
 def test_detail_article_feedback_is_separate_from_news_reaction() -> None:
@@ -361,7 +361,7 @@ def test_superreaction_back_silent_and_comment_all_preserve_details_button() -> 
             FeedbackCallback(delivery_id=7, action=FeedbackAction.SUPERDISLIKE),
         )
     )
-    assert [row[0].text for row in choose.message.reply_markup.inline_keyboard][-1] == ("Подробнее")
+    assert [row[0].text for row in choose.message.reply_markup.inline_keyboard][-1] == ("📖 Подробнее")
 
     back = FakeCallbackQuery(repository.calls)
     asyncio.run(
@@ -370,7 +370,7 @@ def test_superreaction_back_silent_and_comment_all_preserve_details_button() -> 
             FeedbackCallback(delivery_id=7, action=FeedbackAction.BACK),
         )
     )
-    assert back.message.reply_markup.inline_keyboard[1][0].text == "Подробнее"
+    assert back.message.reply_markup.inline_keyboard[1][0].text == "📖 Подробнее"
 
     choose_silent = FakeCallbackQuery(repository.calls)
     asyncio.run(
@@ -392,7 +392,7 @@ def test_superreaction_back_silent_and_comment_all_preserve_details_button() -> 
         "👍",
         "✅ 🔥",
     ]
-    assert silent.message.reply_markup.inline_keyboard[1][0].text == "Подробнее"
+    assert silent.message.reply_markup.inline_keyboard[1][0].text == "📖 Подробнее"
 
     choose_comment = FakeCallbackQuery(repository.calls)
     asyncio.run(
@@ -429,7 +429,7 @@ def test_superreaction_back_silent_and_comment_all_preserve_details_button() -> 
     asyncio.run(comment_handler(FakeCommentMessage()))
 
     assert repository.current == Reaction.SUPERDISLIKE.value
-    assert edited["reply_markup"].inline_keyboard[1][0].text == "Подробнее"
+    assert edited["reply_markup"].inline_keyboard[1][0].text == "📖 Подробнее"
 
 
 def test_placeholder_and_ready_delivery_edit_one_reply_in_place() -> None:

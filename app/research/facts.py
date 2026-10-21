@@ -21,6 +21,7 @@ from app.llm.openrouter import (
     OpenRouterNotConfigured,
     OpenRouterResponseError,
     Transport,
+    codex_sale_transport,
     http_transport,
     known_organizations,
     material_hook_stems,
@@ -345,6 +346,11 @@ EVIDENCE_CONCEPT_PATTERNS: dict[str, re.Pattern[str]] = {
     "robotics": re.compile(r"\b(?:robot\w*|робот\w*)\b", re.IGNORECASE),
     "text": re.compile(r"\b(?:text\w*|текст\w*)\b", re.IGNORECASE),
     "video": re.compile(r"\b(?:video|видео)\b", re.IGNORECASE),
+    # A specific product/category phrase shared by the original headline and cited fact.
+    "verified_bots": re.compile(
+        r"\b(?:verified[\s-]+bots?|верифицированн\w*\s+бот\w*|проверенн\w*\s+бот\w*)\b",
+        re.IGNORECASE,
+    ),
 }
 NEGATION_PATTERN = re.compile(
     r"\b(?:not|no|cannot|can't|doesn't|only|не|нет|только|лишь)\b",
@@ -1427,13 +1433,14 @@ class OpenRouterFactSheetGenerator:
         documents: list[dict[str, Any]],
         model: str,
     ) -> FactSheetGeneration:
-        if self.settings.openrouter_api_key is None:
-            raise OpenRouterNotConfigured("OPENROUTER_API_KEY is required")
+        if self.settings.codex_sale_api_key is None and self.settings.openrouter_api_key is None:
+            raise OpenRouterNotConfigured("AI provider key is required")
         payload = build_fact_sheet_request(model=model, event=event, documents=documents)
-        response = self.transport(
-            payload,
-            self.settings.openrouter_api_key.get_secret_value(),
-        )
+        key = self.settings.codex_sale_api_key or self.settings.openrouter_api_key
+        transport = self.transport
+        if self.settings.codex_sale_api_key and transport is http_transport:
+            transport = codex_sale_transport
+        response = transport(payload, key.get_secret_value())
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
         response_id = str(response["id"]) if response.get("id") else None
@@ -1499,7 +1506,12 @@ class OpenRouterFactSheetGenerator:
 
 def fact_sheet_models(settings: Settings) -> list[str]:
     models: list[str] = []
-    for model in [settings.openrouter_model, settings.openrouter_fallback_model]:
+    available_models = (
+        [settings.codex_sale_model]
+        if settings.codex_sale_api_key
+        else [settings.openrouter_model, settings.openrouter_fallback_model]
+    )
+    for model in available_models:
         if model and model not in models:
             models.append(model)
     return models

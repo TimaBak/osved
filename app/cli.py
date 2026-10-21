@@ -551,6 +551,21 @@ def build_fact_sheet_command(event_id: int) -> None:
     typer.echo(json.dumps(result, ensure_ascii=False))
 
 
+@app.command("revalidate-saved-facts")
+def revalidate_saved_facts_command(
+    event_id: int,
+    apply: Annotated[bool, typer.Option("--apply/--dry-run")] = False,
+) -> None:
+    """Recheck stored invalid AI facts locally; --apply stores only verified results."""
+    from app.research.revalidate import revalidate_saved_fact_sheet
+
+    _, repository = bootstrap()
+    outcome = revalidate_saved_fact_sheet(repository, event_id, apply=apply)
+    typer.echo(json.dumps(outcome, ensure_ascii=False))
+    if outcome["status"] == "invalid":
+        raise typer.Exit(code=1)
+
+
 @app.command("build-dossier")
 def build_dossier_command(event_id: int) -> None:
     """Build a versioned decision snapshot from stored facts and evidence."""
@@ -757,6 +772,9 @@ def pipeline_once(
     if provider not in {"auto", "mtproto", "monid"}:
         raise typer.BadParameter("--provider must be auto, mtproto, or monid")
     settings, repository = bootstrap()
+    if settings.codex_sale_api_key is None and settings.openrouter_api_key is None:
+        typer.echo("Pipeline requires CODEX_SALE_API_KEY or OPENROUTER_API_KEY", err=True)
+        raise typer.Exit(code=2)
     run_id = repository.start_run(
         "pipeline_once",
         {
@@ -787,7 +805,7 @@ def pipeline_once(
         for _ in range(generate_limit):
             # The shared executor researches primary sources and creates a
             # verified card for one fresh event, never a raw trigger/preview.
-            step = executor.research()
+            step = executor.research(max_attempts=1)
             research_steps.append(step)
             cost += float(step.get("cost_usd") or 0)
             errors += int(step.get("errors") or 0)

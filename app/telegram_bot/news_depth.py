@@ -8,6 +8,7 @@ from typing import Any
 
 from app.pipeline.cards import linked_headline_html
 from app.pipeline.telegram_style import clean_news_html, clean_news_text
+from app.telegram_bot.emoji_style import emoji_html, headline_role, load_custom_emoji_ids
 
 
 def depth_key(delivery_id: int) -> str:
@@ -27,6 +28,8 @@ def brief_card_html(card: dict[str, Any]) -> str:
         if not headline.strip() or not lead.strip():
             raise ValueError("empty card")
         linked = linked_headline_html(headline, str(card["primary_preview_url"]))
-        return clean_news_html(f"<b>{linked}</b>\n\n{html.escape(lead)}")
+        ids = load_custom_emoji_ids("/app/config/emoji_ids.json")
+        symbol = emoji_html(headline_role(headline), ids)
+        return clean_news_html(f"{symbol} <b>{linked}</b>\n\n{html.escape(lead)}")
     except (ValueError, TypeError, KeyError):
         return clean_news_html(str(card["rendered_html"]))

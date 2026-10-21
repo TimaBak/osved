@@ -3,14 +3,23 @@ vertical: personal_awareness
 production_max_age_days: 5
 calibration_lookback_days: 21
 topics:
-- technology
+- ai_models_agents
+- ai_products_automation
+- open_source_development
+- startups_technology_business
+- cloud_vps
+- networking_cybersecurity
+- enterprise_it
+- global_technology_companies
 regions_of_interest:
 - global
 goals:
-- Отбирать существенные события по моим источникам и выбранным темам.
+- Отслеживать проверяемые события в AI, технологиях, бизнесе и IT-инфраструктуре.
+- Объяснять значение изменений для разработки, автоматизации и бизнеса.
 positive_patterns:
-- Проверяемые события, понятный контекст и последствия.
+- Первичные официальные источники и подтверждение независимыми публикациями.
+- Существенные релизы, инциденты, исследования и практические кейсы.
 avoid_patterns:
-- Реклама, повтор одного события, неподтверждённые заявления.
+- Реклама, дубли, неподтверждённые заявления, малозначительные анонсы.
 current_projects: []
 exploration_fraction: 0.15
