@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from pathlib import Path
@@ -217,6 +218,41 @@ async def bookmark(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "saved": saved})
 
 
+async def source_update(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        data = await request.json()
+        source_id = data["id"]
+        enabled = data["enabled"]
+        if (
+            not isinstance(source_id, str)
+            or re.fullmatch(r"[a-z0-9_]{1,80}", source_id) is None
+            or type(enabled) is not bool
+        ):
+            return error("invalid_source")
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_source")
+    sources = await asyncio.to_thread(state.store.sources)
+    if source_id not in {row["id"] for row in sources}:
+        return error("not_found", 404)
+
+    def persist() -> None:
+        state.repository.set_runtime_setting(
+            f"source_enabled:{source_id}", str(enabled).lower()
+        )
+        if not enabled:
+            from app.collectors.browser_queue import BrowserTaskQueue
+
+            BrowserTaskQueue(state.repository.database_path).cancel_pending(source_id)
+
+    await asyncio.to_thread(persist)
+    return web.json_response({"id": source_id, "enabled": enabled})
+
+
+async def healthz(request: web.Request) -> web.Response:
+    return web.json_response({"status": "alive"})
+
+
 async def static(request: web.Request) -> web.Response:
     filename = request.match_info.get("filename", "index.html") or "index.html"
     if filename not in {"index.html", "style.css", "app.js"}:
@@ -232,11 +268,12 @@ async def startup(app: web.Application) -> None:
 def create_portal(settings: Settings, repository: Repository) -> web.Application:
     app = web.Application(middlewares=[secure_headers, protect], client_max_size=12_000)
     app[STATE] = PortalState(settings, repository)
-    app.router.add_get("/healthz", lambda _: web.json_response({"status": "alive"}))
+    app.router.add_get("/healthz", healthz)
     app.router.add_post("/api/session", session_create)
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
     app.router.add_post("/api/bookmark", bookmark)
+    app.router.add_post("/api/source", source_update)
     app.router.add_get("/", static)
     app.router.add_get("/{filename}", static)
     app.on_startup.append(startup)
