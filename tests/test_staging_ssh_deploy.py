@@ -28,7 +28,7 @@ def test_ssh_workflow_has_main_success_guard_and_no_runner_root_access() -> None
     assert job["environment"] == "staging"
     assert "conclusion == 'success'" in job["if"]
     assert "head_branch == 'main'" in job["if"]
-    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["permissions"] == {"contents": "read", "actions": "read"}
     assert "StrictHostKeyChecking=yes" in source
     assert "OSVED_DEPLOY_KEY" in source
     assert "OSVED_KNOWN_HOSTS" in source
