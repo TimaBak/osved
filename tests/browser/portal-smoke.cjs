@@ -28,11 +28,23 @@ const { chromium } = require("playwright");
       "none",
       "Private dashboard must be visually hidden before authentication",
     );
-    await page.route("**/api/code-login", route => route.fulfill({
+    let signedIn = false;
+    await page.route("**/api/session", route => {
+      if(route.request().method() !== "GET")return route.continue();
+      return route.fulfill({
+        status: signedIn ? 200 : 401,
+        contentType:"application/json",
+        body: JSON.stringify(signedIn ? {ok:true,csrf:"frontend-smoke-token"} : {error:"unauthorized"}),
+      });
+    });
+    await page.route("**/api/code-login", route => {
+      signedIn=true;
+      return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ ok: true, csrf: "frontend-smoke-token" }),
-    }));
+      });
+    });
     let editorialReady = true;
     await page.route("**/api/overview", route => route.fulfill({
       status: 200,
@@ -86,13 +98,20 @@ const { chromium } = require("playwright");
       status: 200, contentType: "application/json",
       body: JSON.stringify({ id: "rss:example.org", enabled: false }),
     }));
-    await page.route("**/api/logout", route => route.fulfill({
-      status: 200, contentType: "application/json", body: '{"ok":true}',
-    }));
+    await page.route("**/api/logout", route => {
+      signedIn=false;
+      return route.fulfill({
+        status:200,contentType:"application/json",body:'{"ok":true}',
+      });
+    });
     await page.locator("#login-code").fill("123456789012");
     await page.locator("#code-login-submit").click();
     await page.locator("#shell").waitFor({ state: "visible", timeout: 7000 });
     assert.equal(await page.locator("#auth").isVisible(), false);
+    // Page refresh must resume the session, never ask for a new Telegram code.
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator("#shell").waitFor({state:"visible",timeout:7000});
+    assert.equal(await page.locator("#auth").isVisible(),false);
     await page.locator('[data-section="radar"]').click();
     await page.getByText("Предварительный сигнал").waitFor({state:"visible"});
     await page.locator('[data-section="sources"]').click();
