@@ -383,6 +383,33 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                 IntelligenceService(settings, repository).build, "weekly_map"
             )
             await message.answer(intelligence_message(result, "weekly_map"))
+        elif section == "login":
+            if settings.osved_web_url != "https://osved.tima.biz":
+                await message.answer("Веб-кабинет ещё не активирован.")
+                return
+            from app.web.login_codes import issue_login_code
+
+            owner_id = configured_owner_id(settings, repository)
+            if (
+                settings.telegram_bot_token is None
+                or owner_id is None
+                or message.chat.id != owner_id
+            ):
+                return
+            code = await asyncio.to_thread(
+                issue_login_code,
+                repository,
+                token=settings.telegram_bot_token.get_secret_value(),
+                owner_id=owner_id,
+            )
+            await message.answer(
+                "🔐 <b>Одноразовый вход в ОСВЕД</b>\n\n"
+                f"Код: <code>{code}</code>\n"
+                "Действует 5 минут и только один раз.\n\n"
+                "Открой https://osved.tima.biz в обычном браузере "
+                "и введи этот код. Никому его не пересылай.",
+                reply_markup=inline_menu("site"),
+            )
         elif section == "site":
             # WebApp launch supplies signed initData to the frontend. Do not
             # advertise a dead or unconfigured public HTTPS endpoint.
@@ -395,6 +422,10 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                             InlineKeyboardButton(
                                 text="🌐 Открыть кабинет",
                                 web_app=WebAppInfo(url=settings.osved_web_url),
+                            )
+                        ], [
+                            InlineKeyboardButton(
+                                text="🔐 Код для ПК", callback_data="osved_menu:login"
                             )
                         ], [
                             InlineKeyboardButton(

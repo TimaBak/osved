@@ -23,6 +23,7 @@ from app.config import Settings
 from app.db.repository import Repository
 from app.ops.feed_health import feed_health
 from app.web.content import public_url
+from app.web.login_codes import ensure_login_schema, redeem_login_code
 from app.web.store import DashboardStore
 
 COOKIE = "osved_portal_session"
@@ -104,7 +105,7 @@ async def protect(request: web.Request, handler):
     allowed = {os.environ.get("OSVED_WEB_HOST", "osved.tima.biz"), "127.0.0.1", "localhost"}
     if hostname not in allowed:
         return error("invalid_host", 403)
-    if request.path.startswith("/api/") and request.path != "/api/session":
+    if request.path.startswith("/api/") and request.path not in {"/api/session", "/api/code-login"}:
         session = request.app[STATE].session(request)
         if session is None:
             return error("unauthorized", 401)
@@ -119,6 +120,55 @@ async def protect(request: web.Request, handler):
         if request.content_type != "application/json":
             return error("content_type", 415)
     return await handler(request)
+
+
+def new_session(state: PortalState) -> web.Response:
+    now = time.time()
+    state.sessions = {
+        key: session for key, session in state.sessions.items() if session[1] > now
+    }
+    if len(state.sessions) >= 64:
+        state.sessions.pop(next(iter(state.sessions)))
+    token = secrets.token_urlsafe(32)
+    csrf = secrets.token_urlsafe(24)
+    state.sessions[token] = (csrf, now + 8 * 3600)
+    response = web.json_response({"ok": True, "csrf": csrf})
+    response.set_cookie(
+        COOKIE, token, httponly=True, secure=True, samesite="Lax",
+        max_age=8 * 3600, path="/",
+    )
+    return response
+
+
+async def session_status(request: web.Request) -> web.Response:
+    session = request.app[STATE].session(request)
+    if session is None:
+        return error("unauthorized", 401)
+    return web.json_response({"ok": True, "csrf": session[0]})
+
+
+async def code_login(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    from app.telegram_bot.bot import configured_owner_id
+
+    owner_id = configured_owner_id(state.settings, state.repository)
+    if state.settings.telegram_bot_token is None or owner_id is None:
+        return error("authentication_unconfigured", 503)
+    try:
+        payload = await request.json()
+        code = payload["code"]
+    except (ValueError, KeyError, TypeError):
+        return error("invalid_login_code", 401)
+    accepted = await asyncio.to_thread(
+        redeem_login_code,
+        state.repository,
+        token=state.settings.telegram_bot_token.get_secret_value(),
+        owner_id=owner_id,
+        code=code,
+    )
+    if not accepted:
+        return error("invalid_login_code", 401)
+    return new_session(state)
 
 
 async def session_create(request: web.Request) -> web.Response:
@@ -143,21 +193,7 @@ async def session_create(request: web.Request) -> web.Response:
             return error("invalid_telegram_session", 401)
     except (TypeError, AttributeError, ValueError, json.JSONDecodeError):
         return error("invalid_telegram_session", 401)
-    now = time.time()
-    state.sessions = {
-        key: session for key, session in state.sessions.items() if session[1] > now
-    }
-    if len(state.sessions) >= 64:
-        state.sessions.pop(next(iter(state.sessions)))
-    token = secrets.token_urlsafe(32)
-    csrf = secrets.token_urlsafe(24)
-    state.sessions[token] = (csrf, now + 8 * 3600)
-    response = web.json_response({"ok": True, "csrf": csrf})
-    response.set_cookie(
-        COOKIE, token, httponly=True, secure=True, samesite="Lax",
-        max_age=8 * 3600, path="/",
-    )
-    return response
+    return new_session(state)
 
 
 async def logout(request: web.Request) -> web.Response:
@@ -231,7 +267,8 @@ async def source_update(request: web.Request) -> web.Response:
         enabled = data["enabled"]
         if (
             not isinstance(source_id, str)
-            or re.fullmatch(r"[a-z0-9_]{1,80}", source_id) is None
+            or not 1 <= len(source_id) <= 160
+            or re.search(r"[\\x00-\\x1f]", source_id)
             or type(enabled) is not bool
         ):
             return error("invalid_source")
@@ -268,13 +305,16 @@ async def static(request: web.Request) -> web.Response:
 async def startup(app: web.Application) -> None:
     state: PortalState = app[STATE]
     await asyncio.to_thread(state.store.initialize)
+    await asyncio.to_thread(ensure_login_schema, state.repository)
 
 
 def create_portal(settings: Settings, repository: Repository) -> web.Application:
     app = web.Application(middlewares=[secure_headers, protect], client_max_size=12_000)
     app[STATE] = PortalState(settings, repository)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get("/api/session", session_status)
     app.router.add_post("/api/session", session_create)
+    app.router.add_post("/api/code-login", code_login)
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
     app.router.add_post("/api/bookmark", bookmark)

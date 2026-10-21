@@ -15,11 +15,17 @@
       <div class="logomark" aria-hidden="true">◉</div>
       <p class="eyebrow">OSVED / PRIVATE INTELLIGENCE</p>
       <h1>Осведомлённость.<br><em>Без шума.</em></h1>
-      <p>Персональная аналитическая панель. Авторизация доступна через Telegram — только владельцу.</p>
+      <p>Персональная аналитическая панель. В Telegram вход выполняется автоматически; на компьютере можно войти по одноразовому коду из бота ОСВЕД.</p>
+      <form id="code-login-form" class="login-form" autocomplete="off">
+        <label for="login-code">Код из Telegram (12 цифр)</label>
+        <input id="login-code" type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" required autocomplete="one-time-code" placeholder="000000000000" aria-describedby="login-state">
+        <button id="code-login-submit" type="submit">Открыть кабинет</button>
+      </form>
+      <p class="help-note">Код выдаётся кнопкой <strong>«🔐 Войти на сайте»</strong> в личном чате с ботом. Код действует 5 минут и используется один раз.</p>
       <p id="login-state" class="auth-note" role="status">Проверка Telegram…</p>
     </div>
   </div>
-  <div id="shell" class="shell" hidden>
+  <div id="shell" class="shell" hidden aria-label="Личный кабинет ОСВЕД">
     <aside class="sidebar">
       <a class="brand" href="/" aria-label="ОСВЕД — главная"><span class="brand-icon">◉</span><span>ОСВЕД<small>INTELLIGENCE SYSTEM</small></span></a>
       <p class="eyebrow side-label">НАВИГАЦИЯ</p>
@@ -35,7 +41,7 @@
       <div class="side-bottom"><span class="signal-dot"></span> ЕДИНАЯ БАЗА · LIVE DATA<p>Проверенные новости отдельно от непроверенных сигналов.</p></div>
     </aside>
     <div class="work">
-      <header class="topbar"><span class="bread">OSVED <span>/</span> <span id="crumb">ОБЗОР</span></span><div class="top-actions"><span class="live">● LIVE DATA</span><button id="refresh" class="icon-action" aria-label="Обновить данные">↻</button></div></header>
+      <header class="topbar"><span class="bread">OSVED <span>/</span> <span id="crumb">ОБЗОР</span></span><div class="top-actions"><span class="live">● LIVE DATA</span><button id="refresh" class="icon-action" aria-label="Обновить данные">↻</button><button id="logout" class="logout-action" type="button">Выйти</button></div></header>
       <main class="content">
         <div class="heading"><div><p class="eyebrow">YOUR INFORMATION SPACE</p><h1 id="page-title">Информационный обзор</h1><p id="page-description">Факты, события и аналитика — по вашим источникам.</p></div><span class="date" id="current-date"></span></div>
         <section id="metrics" class="metrics" aria-label="Показатели"></section>

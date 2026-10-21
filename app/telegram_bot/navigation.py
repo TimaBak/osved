@@ -31,6 +31,7 @@ LABELS = {
     "preferences": "🧠 Мои реакции",
     "week": "📊 Аналитика",
     "site": "🌐 Веб-кабинет",
+    "login": "🔐 Войти на сайте",
 }
 TEXT_TO_SECTION = {label: key for key, label in LABELS.items()}
 PRIMARY = (
@@ -38,13 +39,14 @@ PRIMARY = (
     ("sources", "topics"),
     ("favorites", "media"),
     ("settings", "home"),
-    ("site",),
+    ("site", "login"),
 )
 HOME_INLINE = (
     ("feed", "radar"),
     ("sources", "topics"),
     ("favorites", "media"),
     ("settings", "week"),
+    ("site", "login"),
 )
 SECTION_INLINE = {
     "media": (
@@ -56,9 +58,11 @@ SECTION_INLINE = {
         ("topics", "preferences"),
         ("sources", "telegram"),
         ("youtube", "site"),
+        ("login",),
         ("home",),
     ),
     "favorites": (("feed", "site"), ("home",)),
+    "site": (("login", "home"),),
     "topics": (("sources", "preferences"), ("home",)),
     "radar": (("sources", "topics"), ("home",)),
 }
