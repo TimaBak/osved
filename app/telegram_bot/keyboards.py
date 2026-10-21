@@ -60,12 +60,12 @@ REACTION_ORDER = (
 )
 
 DETAILS_LABELS = {
-    DetailsButtonState.REQUEST: "Статья · глубже",
-    DetailsButtonState.RUNNING: "Разбор готовится…",
+    DetailsButtonState.REQUEST: "📖 Статья · глубже",
+    DetailsButtonState.RUNNING: "⏳ Разбор готовится…",
     DetailsButtonState.READY: "✅ Разбор готов",
-    DetailsButtonState.RETRY: "↻ Повторить",
-    DetailsButtonState.INSUFFICIENT: "Недостаточно источников",
-    DetailsButtonState.BUDGET_BLOCKED: "Лимит расходов",
+    DetailsButtonState.RETRY: "🔄 Повторить",
+    DetailsButtonState.INSUFFICIENT: "🔎 Недостаточно источников",
+    DetailsButtonState.BUDGET_BLOCKED: "💰 Лимит расходов",
 }
 
 
@@ -78,7 +78,7 @@ def _add_details_button(
 ) -> None:
     if not expanded:
         builder.button(
-            text="Подробнее",
+            text="📖 Подробнее",
             callback_data=NewsDepthCallback(delivery_id=delivery_id, expanded=True),
         )
         return
@@ -87,7 +87,7 @@ def _add_details_button(
         callback_data=DetailsCallback(delivery_id=delivery_id),
     )
     builder.button(
-        text="Свернуть",
+        text="⬆️ Свернуть",
         callback_data=NewsDepthCallback(delivery_id=delivery_id, expanded=False),
     )
 
