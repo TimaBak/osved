@@ -123,7 +123,13 @@ async def protect(request: web.Request, handler):
 
 async def session_create(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
-    if state.settings.telegram_bot_token is None or state.settings.allowed_user_id is None:
+    # The Telegram bot can establish an owner on first /start and persist it in
+    # runtime_settings. Use that SAME owner resolution for the web login.
+    # Never claim a new owner from an unauthenticated web request.
+    from app.telegram_bot.bot import configured_owner_id
+
+    owner_id = configured_owner_id(state.settings, state.repository)
+    if state.settings.telegram_bot_token is None or owner_id is None:
         return error("authentication_unconfigured", 503)
     try:
         payload = await request.json()
@@ -131,7 +137,7 @@ async def session_create(request: web.Request) -> web.Response:
         if not telegram_owner(
             init_data,
             state.settings.telegram_bot_token.get_secret_value(),
-            state.settings.allowed_user_id,
+            owner_id,
             int(time.time()),
         ):
             return error("invalid_telegram_session", 401)
