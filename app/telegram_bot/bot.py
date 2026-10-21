@@ -6,7 +6,7 @@ import logging
 from contextlib import suppress
 from typing import Any
 
-from aiogram import Bot, Dispatcher, Router
+from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
@@ -15,8 +15,6 @@ from aiogram.types import (
     BotCommand,
     CallbackQuery,
     ForceReply,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     InputRichMessage,
     LinkPreviewOptions,
     Message,
@@ -29,6 +27,19 @@ from app.details.research import evaluate_detail_source_gate
 from app.details.worker import DetailWorker
 from app.llm.openrouter import CardDraft
 from app.ops.feed_health import feed_health, feed_health_text
+from app.telegram_bot.bookmarks import (
+    bookmark_markup,
+    is_bookmarked,
+    saved_links,
+    saved_news,
+    toggle_delivery,
+)
+from app.telegram_bot.navigation import (
+    TEXT_TO_SECTION,
+    inline_menu,
+    parse_section,
+    persistent_keyboard,
+)
 from app.pipeline.cards import render_article_rich_html
 from app.pipeline.telegram_style import clean_news_html
 from app.telegram_bot.feedback import FeedbackAction, Reaction, reaction_from_action
@@ -162,12 +173,16 @@ def delivery_keyboard(
     if current is None:
         current_value = repository.current_reaction(delivery_id)
         current = Reaction(current_value) if current_value else None
-    return reaction_keyboard(
+    return bookmark_markup(
+        reaction_keyboard(
+            delivery_id,
+            current,
+            include_details=include_details,
+            details_state=detail_state,
+            expanded=expanded,
+        ),
         delivery_id,
-        current,
-        include_details=include_details,
-        details_state=detail_state,
-        expanded=expanded,
+        saved=is_bookmarked(repository, int(repository.get_delivery_context(delivery_id)["card_id"])),
     )
 
 
@@ -231,62 +246,209 @@ def build_router(settings: Settings, repository: Repository) -> Router:
     register_channel_handlers(router, settings, repository)
     register_video_report_handlers(router, settings, repository)
 
+    async def show_section(message: Message, section: str) -> None:
+        """Perform an actual action instead of telling the owner to type a command."""
+        if section == "home":
+            await message.answer(
+                "🏠 <b>ОСВЕД · главный экран</b>\\nВыбери раздел:",
+                reply_markup=inline_menu(),
+            )
+        elif section == "feed":
+            from app.telegram_bot.news_queue import send_next_news
+
+            result = await send_next_news(
+                settings,
+                repository,
+                bot=message.bot,
+                limit=settings.news_extra_batch_size,
+            )
+            if result.get("status") != "sent":
+                labels = {
+                    "waiting_for_rating": "Оцени предыдущую новость, чтобы увидеть следующую.",
+                    "queue_empty": "Пока нет проверенных новостей. Система не выдаёт непроверенные материалы за новости.",
+                    "sending": "Новость уже отправляется.",
+                    "queue_disabled": "Лента пока не включена.",
+                    "delivery_confirmation_needed": "Невозможно подтвердить отправку. Проверь последние сообщения.",
+                }
+                await message.answer(
+                    "📰 <b>Моя лента</b>\\n\\n"
+                    + labels.get(result.get("status"), "Лента требует диагностики."),
+                    reply_markup=inline_menu("feed"),
+                )
+        elif section == "sources":
+            from app.telegram_bot.sensory import source_menu
+
+            text, keyboard = source_menu(repository)
+            await message.answer(text, reply_markup=keyboard)
+        elif section == "radar":
+            from app.telegram_bot.sensory import radar_status_text
+
+            await message.answer(radar_status_text(repository), reply_markup=inline_menu("radar"))
+        elif section == "telegram":
+            from app.telegram_bot.telegram_channels import menu
+
+            text, keyboard = menu(settings, repository)
+            await message.answer(text, reply_markup=keyboard)
+        elif section == "youtube":
+            from app.telegram_bot.channels import menu
+
+            text, keyboard = menu(settings, repository)
+            await message.answer(text, reply_markup=keyboard)
+        elif section == "videos":
+            from app.telegram_bot.sensory import send_video_recommendations
+
+            result = await send_video_recommendations(
+                message.bot, settings, repository, chat_id=message.chat.id
+            )
+            if not result.get("sent"):
+                await message.answer(
+                    "🎥 Новых видео для показа пока нет.",
+                    reply_markup=inline_menu("media"),
+                )
+        elif section == "media":
+            await message.answer(
+                "🎬 <b>Медиалаб</b>\\n\\n"
+                "Выбери видео или управление каналами. Для краткой сводки пришли "
+                "ссылку на видео YouTube. Полный PDF можно запросить под найденным видео.",
+                reply_markup=inline_menu("media"),
+            )
+        elif section == "favorites":
+            rows = saved_news(repository)
+            if rows:
+                await message.answer(
+                    f"⭐ <b>Избранное</b>\\nСохранённые новости: {len(rows)} (последние 10).",
+                    reply_markup=saved_links(rows),
+                )
+            else:
+                await message.answer("⭐ Избранное пока пусто. Сохраняй новости кнопкой под карточкой.")
+            await message.answer("Разделы", reply_markup=inline_menu("favorites"))
+        elif section == "topics":
+            from app.config import load_interest_profile
+
+            profile = load_interest_profile(settings.interests_file)
+            topics = "\\n".join(f"• {html.escape(t)}" for t in profile.topics[:20])
+            await message.answer(
+                "🎯 <b>Текущие интересы</b>\\n\\n"
+                + (topics or "Список интересов пуст.")
+                + "\\n\\nТемы пока задаются в профиле конфигурации. "
+                  "Источники можно включать и выключать кнопками.",
+                reply_markup=inline_menu("topics"),
+            )
+        elif section == "preferences":
+            from app.radar.preference_patches import build_preference_report
+            from app.radar.preference_patches import render_preference_report
+
+            report = build_preference_report(
+                repository, days=30, chat_id=message.chat.id, max_patches=5
+            )
+            await message.answer(html.escape(render_preference_report(report)[:3700]))
+            await message.answer("Разделы", reply_markup=inline_menu("settings"))
+        elif section == "settings":
+            snapshot = feed_health(repository)
+            await message.answer(
+                "⚙️ <b>Настройки ОСВЕД</b>\\n\\n"
+                + feed_health_text(snapshot)
+                + "\\n\\nВыбери источники, интересы или историю реакций.",
+                reply_markup=inline_menu("settings"),
+            )
+        elif section == "week":
+            from app.intelligence.service import IntelligenceService
+            from app.telegram_bot.intelligence import intelligence_message
+
+            result = await asyncio.to_thread(
+                IntelligenceService(settings, repository).build, "weekly_map"
+            )
+            await message.answer(intelligence_message(result, "weekly_map"))
+        elif section == "site":
+            await message.answer(
+                "🌐 Веб-кабинет osved.tima.biz пока готовится. "
+                "Авторизация для публичного доступа ещё не настроена; "
+                "не обещаю вход до реального деплоя.",
+                reply_markup=inline_menu("settings"),
+            )
+
     @router.message(Command("start"))
     async def start_handler(message: Message) -> None:
         user_id = message.from_user.id if message.from_user else None
-        if user_id is None:
+        if user_id is None or message.chat.id != user_id:
             return
         owner_id = configured_owner_id(settings, repository)
         if owner_id is None:
             owner_id = int(repository.claim_runtime_setting(OWNER_SETTING, str(user_id)))
         if owner_id != user_id:
             return
-        if settings.allowed_user_id is None:
-            await message.answer(
-                "Готово. Вы сохранены как владелец этой персональной ленты.\n"
-                f"Telegram user ID: <code>{user_id}</code>"
-            )
-            return
-        if not is_allowed(settings, repository, user_id):
-            return
-        snapshot = feed_health(repository)
         await message.answer(
-            "<b>ОСВЕД · персональный аналитический центр</b>\n\n"
-            + feed_health_text(snapshot)
-            + "\n\nВыберите раздел ниже. Если новостей пока нет, "
-              "/status покажет состояние системы.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📰 Моя лента", callback_data="osved_menu:news"),
-                 InlineKeyboardButton(text="📡 Радар", callback_data="osved_menu:radar")],
-                [InlineKeyboardButton(text="🗂 Источники", callback_data="osved_menu:sources"),
-                 InlineKeyboardButton(text="⚙️ Статус", callback_data="osved_menu:status")],
-                [InlineKeyboardButton(text="🎬 Видео и PDF", callback_data="osved_menu:media")],
-            ]),
+            "<b>ОСВЕД · персональный аналитический центр</b>\\n\\n"
+            + feed_health_text(feed_health(repository))
+            + "\\n\\nНавигация закреплена внизу чата. Нажимай кнопки — "
+              "команды вводить не нужно.",
+            reply_markup=persistent_keyboard(),
         )
+        await show_section(message, "home")
+
+    @router.message(Command("menu"))
+    async def menu_handler(message: Message) -> None:
+        if not is_allowed(
+            settings, repository, message.from_user.id if message.from_user else None
+        ) or message.chat.type != "private":
+            return
+        await message.answer("🏠 Главное меню закреплено.", reply_markup=persistent_keyboard())
+        await show_section(message, "home")
+
+    @router.message(F.text.in_(tuple(TEXT_TO_SECTION)))
+    async def nav_text_handler(message: Message) -> None:
+        if not is_allowed(
+            settings, repository, message.from_user.id if message.from_user else None
+        ) or message.chat.type != "private":
+            return
+        await show_section(message, TEXT_TO_SECTION[message.text])
 
     @router.callback_query(lambda query: bool(query.data and query.data.startswith("osved_menu:")))
     async def osved_menu_handler(query: CallbackQuery) -> None:
-        if not is_allowed(settings, repository, query.from_user.id):
+        if (
+            not is_allowed(settings, repository, query.from_user.id)
+            or not query.message
+            or query.message.chat.id != query.from_user.id
+        ):
             await query.answer("Недоступно", show_alert=True)
             return
-        section = (query.data or "").split(":", 1)[-1]
-        messages = {
-            "news": ("📰 Моя лента\nИспользуйте /news для следующей новости. "
-                     "Если карточек нет — /status покажет состояние конвейера."),
-            "radar": "📡 Радар\nОткройте /radar для информации о поиске.",
-            "sources": ("🗂 Источники\nОткройте /sources для управления источниками "
-                        "и /tgchannels для Telegram-каналов."),
-            "status": "⚙️ Состояние ОСВЕД\n" + feed_health_text(feed_health(repository)),
-            "media": ("🎬 Медиалаб\n/videos — видео; /channels — YouTube-каналы; "
-                      "/report — PDF по ссылке."),
-        }
-        if section not in messages:
+        section = parse_section(query.data)
+        if section is None:
             await query.answer("Неизвестный раздел", show_alert=True)
             return
         await query.answer()
-        if query.message:
-            await query.message.answer(messages[section])
+        await show_section(query.message, section)
 
+    @router.callback_query(lambda query: bool(query.data and query.data.startswith("osved_save:")))
+    async def save_news_handler(query: CallbackQuery) -> None:
+        if (
+            not is_allowed(settings, repository, query.from_user.id)
+            or not query.message
+            or query.message.chat.id != query.from_user.id
+        ):
+            await query.answer("Недоступно", show_alert=True)
+            return
+        try:
+            delivery_id = int((query.data or "").split(":", 1)[1])
+        except ValueError:
+            await query.answer("Неизвестная карточка", show_alert=True)
+            return
+        if delivery_id < 1:
+            await query.answer("Неизвестная карточка", show_alert=True)
+            return
+        saved = toggle_delivery(
+            repository, delivery_id=delivery_id, owner_id=query.from_user.id
+        )
+        if saved is None:
+            await query.answer("Карточка недоступна", show_alert=True)
+            return
+        await query.answer("Сохранено" if saved else "Убрано из избранного")
+        await query.message.edit_reply_markup(
+            reply_markup=delivery_keyboard(
+                repository, delivery_id, user_id=query.from_user.id,
+                details_enabled=_details_enabled(settings),
+            )
+        )
 
     @router.message(Command("status"))
     async def status_handler(message: Message) -> None:
@@ -749,6 +911,8 @@ async def run_bot(settings: Settings, repository: Repository) -> None:
     try:
         await bot.set_my_commands(
             [
+                BotCommand(command="start", description="Открыть ОСВЕД и кнопки"),
+                BotCommand(command="menu", description="Главное меню"),
                 BotCommand(command="help", description="Как пользоваться ОСВЕД"),
                 BotCommand(command="bio", description="Ежедневные биографии: статус и пауза"),
                 BotCommand(command="news", description="Получить ещё свежие новости"),
@@ -1049,7 +1213,9 @@ async def send_formatted_card(
     delivery_format: DeliveryFormat,
     include_details: bool = True,
 ) -> Message:
-    reply_markup = reaction_keyboard(delivery_id, include_details=include_details)
+    reply_markup = bookmark_markup(
+        reaction_keyboard(delivery_id, include_details=include_details), delivery_id
+    )
     if delivery_format == DeliveryFormat.ARTICLE:
         draft = CardDraft.model_validate_json(card["structured_output_json"])
         rich_html = render_article_rich_html(draft, card["primary_preview_url"])
