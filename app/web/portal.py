@@ -22,9 +22,11 @@ from aiohttp import web
 from app.config import Settings
 from app.db.repository import Repository
 from app.ops.feed_health import feed_health
-from app.web.content import public_url
+from app.web.content import plain_text, public_url, safe_html
 from app.web.login_codes import ensure_login_schema, redeem_login_code
 from app.web.store import DashboardStore
+from app.video.reports import ReportError
+from app.video.transcripts import youtube_video_id
 
 COOKIE = "osved_portal_session"
 STATIC = Path(__file__).resolve().parent / "portal_static"
@@ -68,6 +70,9 @@ class PortalState:
         self.repository = repository
         self.store = DashboardStore(settings, repository)
         self.sessions: dict[str, tuple[str, float]] = {}
+        self.video_jobs: dict[str, dict] = {}
+        self.video_by_id: dict[str, str] = {}
+        self.video_tasks: set[asyncio.Task] = set()
 
     def session(self, request: web.Request) -> tuple[str, float] | None:
         key = request.cookies.get(COOKIE, "")
@@ -239,6 +244,134 @@ async def overview(request: web.Request) -> web.Response:
     return web.json_response(await asyncio.to_thread(read))
 
 
+async def article_detail(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    kind = request.match_info["kind"]
+    try:
+        item_id = int(request.match_info["item_id"])
+    except ValueError:
+        return error("invalid_id")
+    if kind not in {"news", "video"} or not 0 < item_id < 2**31:
+        return error("invalid_id")
+    item = await asyncio.to_thread(state.store.item, kind, item_id)
+    return web.json_response({"item": item}) if item else error("not_found", 404)
+
+
+async def signal_detail(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        event_id = int(request.match_info["item_id"])
+    except ValueError:
+        return error("invalid_id")
+    if not 0 < event_id < 2**31:
+        return error("invalid_id")
+
+    def read() -> dict | None:
+        with state.repository.connection() as db:
+            row = db.execute(
+                """SELECT e.id, e.headline, e.event_at, si.original_text,
+                si.source_url, s.name AS source_name
+                FROM events e JOIN source_items si ON si.id=e.primary_source_item_id
+                JOIN sources s ON s.id=si.source_id
+                WHERE e.id=? AND e.status='candidate'""", (event_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "kind": "radar", "id": row["id"], "title": row["headline"],
+            "summary": plain_text(row["original_text"])[:2000],
+            "content": {
+                "brief": safe_html(str(row["original_text"] or "")[:12000]),
+            },
+            "source_name": row["source_name"],
+            "sources": [
+                {"title": row["source_name"], "url": public_url(row["source_url"])}
+            ] if public_url(row["source_url"]) else [],
+            "url": public_url(row["source_url"]),
+            "published_at": row["event_at"], "verified": False,
+        }
+
+    item = await asyncio.to_thread(read)
+    return web.json_response({"item": item}) if item else error("not_found", 404)
+
+
+async def run_video_job(state: PortalState, job_id: str, video_id: str) -> None:
+    job = state.video_jobs[job_id]
+    job["status"] = "running"
+    try:
+        text = await asyncio.to_thread(state.store.reports.build_tldr, video_id)
+        job.update({"status": "ready", "text": text[:24000]})
+    except ReportError as exc:
+        job.update({"status": "failed", "error": exc.status})
+    except Exception:
+        job.update({"status": "failed", "error": "generation_failed"})
+
+
+async def video_summary(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        payload = await request.json()
+        url = payload["url"]
+        if not isinstance(url, str) or len(url) > 2048:
+            return error("invalid_youtube_link")
+        video_id = youtube_video_id(url)
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_youtube_link")
+    cached = await asyncio.to_thread(state.store.reports.cached_tldr, video_id)
+    if cached:
+        return web.json_response({
+            "status": "ready", "text": cached[:24000], "cached": True,
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+        })
+    if not state.settings.video_reports_enabled:
+        return error("video_generation_disabled", 409)
+    if state.settings.openrouter_api_key is None:
+        return error("ai_provider_unconfigured", 409)
+    if state.settings.monid_api_key is None:
+        return error("transcription_provider_unconfigured", 409)
+    # Browser-side video generation requires explicit budget protection.
+    if not state.settings.video_report_budget_enabled:
+        return error("video_budget_guard_disabled", 409)
+    if state.repository.current_month_cost() >= state.settings.budget_hard_stop_usd:
+        return error("budget_blocked", 409)
+    existing = state.video_by_id.get(video_id)
+    if existing:
+        return web.json_response(
+            {"status": state.video_jobs[existing]["status"], "job_id": existing}
+        )
+    if any(job["status"] in {"queued", "running"} for job in state.video_jobs.values()):
+        return error("video_busy", 429)
+    if len(state.video_jobs) > 50:
+        # Completed job results can be recovered from the durable report cache.
+        state.video_jobs = {
+            key: value for key, value in state.video_jobs.items()
+            if value["status"] in {"queued", "running"}
+        }
+        state.video_by_id = {
+            key: value for key, value in state.video_by_id.items()
+            if value in state.video_jobs
+        }
+    job_id = secrets.token_urlsafe(18)
+    state.video_jobs[job_id] = {"status": "queued", "error": None}
+    state.video_by_id[video_id] = job_id
+    task = asyncio.create_task(run_video_job(state, job_id, video_id))
+    state.video_tasks.add(task)
+    task.add_done_callback(state.video_tasks.discard)
+    return web.json_response({"status": "queued", "job_id": job_id}, status=202)
+
+
+async def video_job(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    job = state.video_jobs.get(request.match_info["job_id"])
+    return web.json_response(job) if job else error("not_found", 404)
+
+
+async def shutdown(app: web.Application) -> None:
+    state: PortalState = app[STATE]
+    if state.video_tasks:
+        await asyncio.wait(state.video_tasks, timeout=5)
+
+
 async def bookmark(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     try:
@@ -317,11 +450,16 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/code-login", code_login)
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
+    app.router.add_get("/api/article/{kind}/{item_id}", article_detail)
+    app.router.add_get("/api/radar/{item_id}", signal_detail)
+    app.router.add_post("/api/video/summary", video_summary)
+    app.router.add_get("/api/video/jobs/{job_id}", video_job)
     app.router.add_post("/api/bookmark", bookmark)
     app.router.add_post("/api/source", source_update)
     app.router.add_get("/", static)
     app.router.add_get("/{filename}", static)
     app.on_startup.append(startup)
+    app.on_shutdown.append(shutdown)
     return app
 
 
