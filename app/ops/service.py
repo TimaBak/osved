@@ -61,6 +61,27 @@ async def schedule_worker(settings: Settings, repository: Repository) -> None:
         await asyncio.sleep(30)
 
 
+async def portal_worker(settings: Settings, repository: Repository) -> None:
+    """Expose the private dashboard only on the Docker-local port.
+
+    This is one supervised backend: Telegram, scheduler and HTTPS-proxied
+    portal all share the authoritative repository and deployment lifecycle.
+    """
+    from aiohttp import web
+
+    from app.web.portal import create_portal
+
+    runner = web.AppRunner(create_portal(settings, repository))
+    await runner.setup()
+    try:
+        site = web.TCPSite(runner, host="0.0.0.0", port=8080)
+        await site.start()
+        logger.info("OSVED private portal is listening inside the service container")
+        await asyncio.Future()
+    finally:
+        await runner.cleanup()
+
+
 async def serve(settings: Settings, repository: Repository) -> None:
     # Initial liveness marker: the first bounded radar may take several minutes.
     # Only successful ticks refresh it afterward; a stuck/erroring scheduler
@@ -71,6 +92,8 @@ async def serve(settings: Settings, repository: Repository) -> None:
         asyncio.create_task(schedule_worker(settings, repository), name="schedule"),
         asyncio.create_task(run_bot(settings, repository), name="telegram"),
     ]
+    if settings.app_env == "production":
+        tasks.append(asyncio.create_task(portal_worker(settings, repository), name="portal"))
     try:
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
