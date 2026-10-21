@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090f1b">
+  <title>ОСВЕД — Intelligence Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div id="auth" class="auth-shell">
+    <div class="auth-panel">
+      <div class="logomark" aria-hidden="true">◉</div>
+      <p class="eyebrow">OSVED / PRIVATE INTELLIGENCE</p>
+      <h1>Осведомлённость.<br><em>Без шума.</em></h1>
+      <p>Персональная аналитическая панель. Авторизация доступна через Telegram — только владельцу.</p>
+      <p id="login-state" class="auth-note" role="status">Проверка Telegram…</p>
+    </div>
+  </div>
+  <div id="shell" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="ОСВЕД — главная"><span class="brand-icon">◉</span><span>ОСВЕД<small>INTELLIGENCE SYSTEM</small></span></a>
+      <p class="eyebrow side-label">НАВИГАЦИЯ</p>
+      <nav id="nav" aria-label="Разделы">
+        <button class="nav-link selected" data-section="overview">◫ <span>Обзор</span></button>
+        <button class="nav-link" data-section="feed">▤ <span>Моя лента</span></button>
+        <button class="nav-link" data-section="radar">◉ <span>Радар событий</span></button>
+        <button class="nav-link" data-section="sources">◇ <span>Источники</span></button>
+        <button class="nav-link" data-section="saved">☆ <span>Избранное</span></button>
+        <button class="nav-link" data-section="media">▣ <span>Медиалаб</span></button>
+        <button class="nav-link" data-section="settings">⚙ <span>Настройки</span></button>
+      </nav>
+      <div class="side-bottom"><span class="signal-dot"></span> ЕДИНАЯ БАЗА · LIVE DATA<p>Проверенные новости отдельно от непроверенных сигналов.</p></div>
+    </aside>
+    <div class="work">
+      <header class="topbar"><span class="bread">OSVED <span>/</span> <span id="crumb">ОБЗОР</span></span><div class="top-actions"><span class="live">● LIVE DATA</span><button id="refresh" class="icon-action" aria-label="Обновить данные">↻</button></div></header>
+      <main class="content">
+        <div class="heading"><div><p class="eyebrow">YOUR INFORMATION SPACE</p><h1 id="page-title">Информационный обзор</h1><p id="page-description">Факты, события и аналитика — по вашим источникам.</p></div><span class="date" id="current-date"></span></div>
+        <section id="metrics" class="metrics" aria-label="Показатели"></section>
+        <section id="content" class="card-grid" aria-live="polite"></section>
+        <footer>ОСВЕД · Проверенные факты и сырые сигналы всегда разделены · Данные не публикуются открыто</footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
