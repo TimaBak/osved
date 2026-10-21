@@ -1,6 +1,13 @@
 name: Checks
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Recovery path when commits made via integrations do not emit a push workflow run.
+    - cron: '17 * * * *'
 
 permissions:
   contents: read
