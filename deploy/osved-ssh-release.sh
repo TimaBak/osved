@@ -21,8 +21,9 @@ app_dir=/opt/osved/app
   echo "Source checkout has local edits" >&2; exit 1;
 }
 previous_sha=$(git -C "$source_dir" rev-parse HEAD)
-git -C "$source_dir" fetch --no-tags origin main
-[[ "$(git -C "$source_dir" rev-parse refs/remotes/origin/main)" == "$release_sha" ]] || {
+git -C "$source_dir" fetch --no-tags origin \
+  '+refs/heads/main:refs/remotes/origin/main'
+[[ "$(git -C "$source_dir" rev-parse --verify refs/remotes/origin/main)" == "$release_sha" ]] || {
   echo "Refusing anything except exact current main" >&2; exit 1;
 }
 git -C "$source_dir" checkout --detach "$release_sha"
