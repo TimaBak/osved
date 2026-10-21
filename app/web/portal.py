@@ -27,6 +27,13 @@ from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
 from app.web.login_codes import ensure_login_schema, redeem_login_code
 from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
+from app.web.sessions import (
+    SESSION_SECONDS,
+    initialize_sessions,
+    issue_session,
+    lookup_session,
+    revoke_session,
+)
 from app.web.store import DashboardStore
 
 COOKIE = "osved_portal_session"
@@ -70,17 +77,18 @@ class PortalState:
         self.settings = settings
         self.repository = repository
         self.store = DashboardStore(settings, repository)
-        self.sessions: dict[str, tuple[str, float]] = {}
         self.video_jobs: dict[str, dict] = {}
         self.video_by_id: dict[str, str] = {}
         self.video_tasks: set[asyncio.Task] = set()
 
     def session(self, request: web.Request) -> tuple[str, float] | None:
-        key = request.cookies.get(COOKIE, "")
-        session = self.sessions.get(key)
-        if session and session[1] > time.time():
-            return session
-        return None
+        from app.telegram_bot.bot import configured_owner_id
+
+        owner_id = configured_owner_id(self.settings, self.repository)
+        csrf = lookup_session(
+            self.repository, request.cookies.get(COOKIE, ""), owner_id
+        )
+        return (csrf, 0.0) if csrf else None
 
 
 STATE = web.AppKey("osved_portal_state", PortalState)
@@ -128,20 +136,12 @@ async def protect(request: web.Request, handler):
     return await handler(request)
 
 
-def new_session(state: PortalState) -> web.Response:
-    now = time.time()
-    state.sessions = {
-        key: session for key, session in state.sessions.items() if session[1] > now
-    }
-    if len(state.sessions) >= 64:
-        state.sessions.pop(next(iter(state.sessions)))
-    token = secrets.token_urlsafe(32)
-    csrf = secrets.token_urlsafe(24)
-    state.sessions[token] = (csrf, now + 8 * 3600)
+def new_session(state: PortalState, owner_id: int) -> web.Response:
+    token, csrf = issue_session(state.repository, owner_id)
     response = web.json_response({"ok": True, "csrf": csrf})
     response.set_cookie(
         COOKIE, token, httponly=True, secure=True, samesite="Lax",
-        max_age=8 * 3600, path="/",
+        max_age=SESSION_SECONDS, path="/",
     )
     return response
 
@@ -174,7 +174,7 @@ async def code_login(request: web.Request) -> web.Response:
     )
     if not accepted:
         return error("invalid_login_code", 401)
-    return new_session(state)
+    return new_session(state, owner_id)
 
 
 async def session_create(request: web.Request) -> web.Response:
@@ -204,7 +204,7 @@ async def session_create(request: web.Request) -> web.Response:
 
 async def logout(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
-    state.sessions.pop(request.cookies.get(COOKIE, ""), None)
+    revoke_session(state.repository, request.cookies.get(COOKIE, ""))
     response = web.json_response({"ok": True})
     response.del_cookie(COOKIE, path="/")
     return response
@@ -487,6 +487,7 @@ async def startup(app: web.Application) -> None:
     state: PortalState = app[STATE]
     await asyncio.to_thread(state.store.initialize)
     await asyncio.to_thread(ensure_login_schema, state.repository)
+    await asyncio.to_thread(initialize_sessions, state.repository)
     await asyncio.to_thread(initialize, state.repository)
 
 
