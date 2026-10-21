@@ -1,0 +1,54 @@
+name: SSH connectivity smoke test
+
+on:
+  push:
+    paths:
+      - .github/workflows/ssh-connectivity-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 5
+    steps:
+      - name: Verify restricted SSH connection without deploying
+        env:
+          DEPLOY_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.OSVED_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.OSVED_DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.OSVED_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_KNOWN_HOSTS"
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          umask 077
+          key_file=$(mktemp)
+          known_hosts=$(mktemp)
+          output=$(mktemp)
+          trap 'rm -f "$key_file" "$known_hosts" "$output"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key_file"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$known_hosts"
+          chmod 600 "$key_file" "$known_hosts"
+          # Invalid input MUST be rejected by the forced command before any deploy.
+          set +e
+          printf 'invalid-sha\n' | ssh -F /dev/null \
+            -i "$key_file" -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" \
+            -o BatchMode=yes -o ConnectTimeout=15 \
+            "$DEPLOY_USER@$DEPLOY_HOST" > "$output" 2>&1
+          result=$?
+          set -e
+          if [[ "$result" -eq 0 ]] || ! grep -qx 'Invalid commit' "$output"; then
+            echo 'SSH smoke test failed: unable to prove forced-command validation.'
+            # Do not print SSH output; it may contain connection or account details.
+            exit 1
+          fi
+          echo 'Restricted SSH verified; intentionally invalid SHA rejected; no deployment performed.'
