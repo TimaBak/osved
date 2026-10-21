@@ -174,17 +174,22 @@ def delivery_keyboard(
     if current is None:
         current_value = repository.current_reaction(delivery_id)
         current = Reaction(current_value) if current_value else None
-    context = repository.get_delivery_context(delivery_id)
-    return bookmark_markup(
-        reaction_keyboard(
-            delivery_id,
-            current,
-            include_details=include_details,
-            details_state=detail_state,
-            expanded=expanded,
-        ),
+    keyboard = reaction_keyboard(
         delivery_id,
-        saved=bool(context and is_bookmarked(repository, int(context["card_id"]))),
+        current,
+        include_details=include_details,
+        details_state=detail_state,
+        expanded=expanded,
+    )
+    context = repository.get_delivery_context(delivery_id)
+    # Legacy detail-only adapters have no SQLite connection; retain their
+    # existing reaction controls without attempting bookmark storage.
+    if not context or not hasattr(repository, "connection"):
+        return keyboard
+    return bookmark_markup(
+        keyboard,
+        delivery_id,
+        saved=is_bookmarked(repository, int(context["card_id"])),
     )
 
 
