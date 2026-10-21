@@ -242,6 +242,8 @@ class Settings(BaseSettings):
     sensory_sources_file: Path = Path("config/sensory-sources.yaml")
     log_level: str = "INFO"
 
+    osved_web_url: str | None = None
+
     telegram_bot_token: SecretStr | None = None
     allowed_user_id: int | None = None
     telegram_api_id: int | None = None
