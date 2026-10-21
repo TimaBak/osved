@@ -89,3 +89,10 @@ jobs:
             -o BatchMode=yes \
             -o ConnectTimeout=20 \
             "$DEPLOY_USER@$DEPLOY_HOST"
+          {
+            echo "### OSVED staging release"
+            echo "- Result: success"
+            echo "- SHA: \`$COMMIT\`"
+            echo "- Target: staging / Hermes"
+            echo "- Verification: server-side Docker healthcheck returned healthy"
+          } >> "$GITHUB_STEP_SUMMARY"
