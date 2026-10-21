@@ -5,6 +5,7 @@ from app.telegram_bot.bookmarks import (
     is_bookmarked,
     toggle_delivery,
 )
+from app.telegram_bot.keyboards import reaction_keyboard
 from app.telegram_bot.navigation import (
     LABELS,
     TEXT_TO_SECTION,
@@ -12,7 +13,6 @@ from app.telegram_bot.navigation import (
     parse_section,
     persistent_keyboard,
 )
-from app.telegram_bot.keyboards import reaction_keyboard
 from tests.test_schedule import setup_schedule
 
 
