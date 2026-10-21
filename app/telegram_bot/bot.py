@@ -15,6 +15,7 @@ from aiogram.types import (
     BotCommand,
     CallbackQuery,
     ForceReply,
+    InlineKeyboardMarkup,
     InputRichMessage,
     LinkPreviewOptions,
     Message,
@@ -250,7 +251,7 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         """Perform an actual action instead of telling the owner to type a command."""
         if section == "home":
             await message.answer(
-                "🏠 <b>ОСВЕД · главный экран</b>\\nВыбери раздел:",
+                "🏠 <b>ОСВЕД · главный экран</b>\nВыбери раздел:",
                 reply_markup=inline_menu(),
             )
         elif section == "feed":
@@ -271,7 +272,7 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                     "delivery_confirmation_needed": "Невозможно подтвердить отправку. Проверь последние сообщения.",
                 }
                 await message.answer(
-                    "📰 <b>Моя лента</b>\\n\\n"
+                    "📰 <b>Моя лента</b>\n\n"
                     + labels.get(result.get("status"), "Лента требует диагностики."),
                     reply_markup=inline_menu("feed"),
                 )
@@ -307,7 +308,7 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                 )
         elif section == "media":
             await message.answer(
-                "🎬 <b>Медиалаб</b>\\n\\n"
+                "🎬 <b>Медиалаб</b>\n\n"
                 "Выбери видео или управление каналами. Для краткой сводки пришли "
                 "ссылку на видео YouTube. Полный PDF можно запросить под найденным видео.",
                 reply_markup=inline_menu("media"),
@@ -316,7 +317,7 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             rows = saved_news(repository)
             if rows:
                 await message.answer(
-                    f"⭐ <b>Избранное</b>\\nСохранённые новости: {len(rows)} (последние 10).",
+                    f"⭐ <b>Избранное</b>\nСохранённые новости: {len(rows)} (последние 10).",
                     reply_markup=saved_links(rows),
                 )
             else:
@@ -326,11 +327,11 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             from app.config import load_interest_profile
 
             profile = load_interest_profile(settings.interests_file)
-            topics = "\\n".join(f"• {html.escape(t)}" for t in profile.topics[:20])
+            topics = "\n".join(f"• {html.escape(t)}" for t in profile.topics[:20])
             await message.answer(
-                "🎯 <b>Текущие интересы</b>\\n\\n"
+                "🎯 <b>Текущие интересы</b>\n\n"
                 + (topics or "Список интересов пуст.")
-                + "\\n\\nТемы пока задаются в профиле конфигурации. "
+                + "\n\nТемы пока задаются в профиле конфигурации. "
                   "Источники можно включать и выключать кнопками.",
                 reply_markup=inline_menu("topics"),
             )
@@ -346,9 +347,9 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         elif section == "settings":
             snapshot = feed_health(repository)
             await message.answer(
-                "⚙️ <b>Настройки ОСВЕД</b>\\n\\n"
+                "⚙️ <b>Настройки ОСВЕД</b>\n\n"
                 + feed_health_text(snapshot)
-                + "\\n\\nВыбери источники, интересы или историю реакций.",
+                + "\n\nВыбери источники, интересы или историю реакций.",
                 reply_markup=inline_menu("settings"),
             )
         elif section == "week":
@@ -378,9 +379,9 @@ def build_router(settings: Settings, repository: Repository) -> Router:
         if owner_id != user_id:
             return
         await message.answer(
-            "<b>ОСВЕД · персональный аналитический центр</b>\\n\\n"
+            "<b>ОСВЕД · персональный аналитический центр</b>\n\n"
             + feed_health_text(feed_health(repository))
-            + "\\n\\nНавигация закреплена внизу чата. Нажимай кнопки — "
+            + "\n\nНавигация закреплена внизу чата. Нажимай кнопки — "
               "команды вводить не нужно.",
             reply_markup=persistent_keyboard(),
         )
