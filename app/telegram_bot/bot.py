@@ -27,6 +27,7 @@ from app.config import DeliveryFormat, Settings
 from app.db.repository import Repository
 from app.details.research import evaluate_detail_source_gate
 from app.details.worker import DetailWorker
+from app.ops.feed_health import feed_health, feed_health_text
 from app.llm.openrouter import CardDraft
 from app.pipeline.cards import render_article_rich_html
 from app.pipeline.telegram_style import clean_news_html
@@ -248,12 +249,12 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             return
         if not is_allowed(settings, repository, user_id):
             return
-        from app.ops.feed_health import feed_health, feed_health_text
         snapshot = feed_health(repository)
         await message.answer(
             "<b>ОСВЕД · персональный аналитический центр</b>\n\n"
             + feed_health_text(snapshot)
-            + "\n\nВыберите раздел ниже. Если новостей пока нет, /status покажет состояние системы.",
+            + "\n\nВыберите раздел ниже. Если новостей пока нет, "
+              "/status покажет состояние системы.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📰 Моя лента", callback_data="osved_menu:news"),
                  InlineKeyboardButton(text="📡 Радар", callback_data="osved_menu:radar")],
@@ -270,11 +271,14 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             return
         section = (query.data or "").split(":", 1)[-1]
         messages = {
-            "news": "📰 Моя лента\nИспользуйте /news для следующей новости. Если карточек нет — /status покажет состояние конвейера.",
+            "news": ("📰 Моя лента\nИспользуйте /news для следующей новости. "
+                     "Если карточек нет — /status покажет состояние конвейера."),
             "radar": "📡 Радар\nОткройте /radar для информации о поиске.",
-            "sources": "🗂 Источники\nОткройте /sources для управления источниками и /tgchannels для Telegram-каналов.",
+            "sources": ("🗂 Источники\nОткройте /sources для управления источниками "
+                        "и /tgchannels для Telegram-каналов."),
             "status": "⚙️ Состояние ОСВЕД\n" + feed_health_text(feed_health(repository)),
-            "media": "🎬 Медиалаб\n/videos — видео; /channels — YouTube-каналы; /report — PDF по ссылке.",
+            "media": ("🎬 Медиалаб\n/videos — видео; /channels — YouTube-каналы; "
+                      "/report — PDF по ссылке."),
         }
         if section not in messages:
             await query.answer("Неизвестный раздел", show_alert=True)
