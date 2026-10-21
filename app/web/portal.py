@@ -199,7 +199,7 @@ async def session_create(request: web.Request) -> web.Response:
             return error("invalid_telegram_session", 401)
     except (TypeError, AttributeError, ValueError, json.JSONDecodeError):
         return error("invalid_telegram_session", 401)
-    return new_session(state)
+    return new_session(state, owner_id)
 
 
 async def logout(request: web.Request) -> web.Response:
