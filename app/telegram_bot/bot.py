@@ -15,20 +15,20 @@ from aiogram.types import (
     BotCommand,
     CallbackQuery,
     ForceReply,
+    InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputRichMessage,
     LinkPreviewOptions,
     Message,
     ReplyParameters,
-    InlineKeyboardButton,
 )
 
 from app.config import DeliveryFormat, Settings
 from app.db.repository import Repository
 from app.details.research import evaluate_detail_source_gate
 from app.details.worker import DetailWorker
-from app.ops.feed_health import feed_health, feed_health_text
 from app.llm.openrouter import CardDraft
+from app.ops.feed_health import feed_health, feed_health_text
 from app.pipeline.cards import render_article_rich_html
 from app.pipeline.telegram_style import clean_news_html
 from app.telegram_bot.feedback import FeedbackAction, Reaction, reaction_from_action
