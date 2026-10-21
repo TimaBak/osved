@@ -101,9 +101,9 @@ def test_expand_collapse_is_cached_idempotent_and_does_not_generate_or_rate():
     ]
     expanded = query.message.edits[0]["reply_markup"].inline_keyboard
     assert [button.text for button in expanded[0]] == ["⛔", "👎", "👍", "✅ 🔥"]
-    assert [button.text for button in expanded[1]] == ["Статья · глубже", "Свернуть"]
+    assert [button.text for button in expanded[1]] == ["📖 Статья · глубже", "⬆️ Свернуть"]
     assert DetailsCallback.unpack(expanded[1][0].callback_data).delivery_id == 7
-    assert query.message.reply_markup.inline_keyboard[1][0].text == "Подробнее"
+    assert query.message.reply_markup.inline_keyboard[1][0].text == "📖 Подробнее"
     assert all(edit["parse_mode"] == "HTML" for edit in query.message.edits)
     assert all(
         edit["link_preview_options"].url == CARD["primary_preview_url"]
@@ -120,7 +120,7 @@ def test_superreaction_comment_controls_and_article_survive_expansion():
         "💬 Прокомментировать",
         "✅ Отправить молча",
         "↩️ Назад",
-        "Статья · глубже",
+        "📖 Статья · глубже",
     ]
     assert "enqueue" not in repo.calls
 
@@ -167,7 +167,7 @@ def test_article_status_updates_do_not_reopen_a_collapsed_card():
     repo = DepthRepository()
     repo.request = {"status": "ready"}
     repo.set_runtime_setting(depth_key(7), "brief")
-    assert delivery_keyboard(repo, 7).inline_keyboard[1][0].text == "Подробнее"
+    assert delivery_keyboard(repo, 7).inline_keyboard[1][0].text == "📖 Подробнее"
     repo.set_runtime_setting(depth_key(7), "expanded")
     assert delivery_keyboard(repo, 7).inline_keyboard[1][0].text == "✅ Разбор готов"
     assert all(
