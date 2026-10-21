@@ -152,8 +152,8 @@ def personalize(items: list[dict], preferences: dict) -> list[dict]:
             )
         if learned:
             explanation.append(
-                ("Вы чаще выбирали похожие материалы" if learned > 0
-                 else "Вы реже выбирали похожие материалы")
+                "Вы чаще выбирали похожие материалы" if learned > 0
+                else "Вы реже выбирали похожие материалы"
             )
         if own_action:
             explanation.append("Ваша оценка именно этой публикации учтена")
