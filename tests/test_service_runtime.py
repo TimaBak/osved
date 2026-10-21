@@ -126,3 +126,37 @@ def test_supervisor_cancels_bot_when_schedule_stops(tmp_path, monkeypatch):
     asyncio.run(service.serve(settings, repository))
     assert cancelled == [True]
     assert healthcheck.check() is True
+
+
+
+def test_production_supervisor_runs_and_cleans_up_private_portal(tmp_path, monkeypatch):
+    settings, repository = environment(tmp_path, monkeypatch)
+    settings.app_env = "production"
+    repository.migrate()
+    started = []
+    cancelled = []
+
+    async def stopped_schedule(*args):
+        await asyncio.sleep(0)
+        return None
+
+    async def idle_bot(*args):
+        started.append("bot")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append("bot")
+
+    async def idle_portal(*args):
+        started.append("portal")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append("portal")
+
+    monkeypatch.setattr(service, "schedule_worker", stopped_schedule)
+    monkeypatch.setattr(service, "run_bot", idle_bot)
+    monkeypatch.setattr(service, "portal_worker", idle_portal)
+    asyncio.run(service.serve(settings, repository))
+    assert set(started) == {"bot", "portal"}
+    assert set(cancelled) == {"bot", "portal"}

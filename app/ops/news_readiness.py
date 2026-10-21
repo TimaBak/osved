@@ -114,10 +114,10 @@ def diagnose(
 
 
 def portal_health() -> bool:
-    """Probe only the known internal Compose service; never the public network."""
+    """Probe the web API inside the single OSVED container; no public request."""
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open("http://portal:8080/healthz", timeout=3) as response:
+        with opener.open("http://127.0.0.1:8080/healthz", timeout=3) as response:
             if response.status != 200:
                 return False
             return json.loads(response.read(1024)) == {"status": "alive"}

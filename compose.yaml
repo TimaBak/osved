@@ -22,6 +22,9 @@ services:
     init: true
     restart: unless-stopped
     command: [osved, serve]
+    # Portal and Telegram live in the same supervised backend. nginx handles HTTPS.
+    ports:
+      - "127.0.0.1:18765:8080"
     stop_grace_period: 60s
     mem_limit: 1g
     cpus: 1.0
@@ -33,42 +36,6 @@ services:
       interval: 60s
       timeout: 10s
       start_period: 60s
-      retries: 3
-    logging:
-      driver: json-file
-      options:
-        max-size: 5m
-        max-file: "3"
-  portal:
-    build: .
-    env_file: .env
-    environment:
-      DATA_DIR: /app/data
-      SOURCES_FILE: /app/config/sources.yaml
-      INTERESTS_FILE: /app/config/interests.yaml
-      CONTOURS_FILE: /app/config/contours.yaml
-      TELEGRAM_SESSION_PATH: /app/data/telegram-reader.session
-      OSVED_WEB_HOST: osved.tima.biz
-    volumes:
-      - data:/app/data
-      - ./config:/app/config:ro
-    # Never publish the private dashboard directly to the internet:
-    # nginx terminates HTTPS for osved.tima.biz and proxies to localhost.
-    ports:
-      - "127.0.0.1:18765:8080"
-    command: [python, -m, app.web.portal]
-    init: true
-    restart: unless-stopped
-    mem_limit: 384m
-    cpus: 0.25
-    pids_limit: 64
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()"]
-      interval: 60s
-      timeout: 10s
-      start_period: 30s
       retries: 3
     logging:
       driver: json-file
