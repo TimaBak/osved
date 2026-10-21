@@ -1,53 +1,94 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#090f1b">
-  <title>ОСВЕД — Intelligence Dashboard</title>
+  <meta name="theme-color" content="#111a29">
+  <meta name="description" content="ОСВЕД — персональная информационно-аналитическая платформа.">
+  <title>ОСВЕД · Интеллектуальная информационная среда</title>
   <link rel="stylesheet" href="/style.css">
   <script src="https://telegram.org/js/telegram-web-app.js?64"></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
-  <div id="auth" class="auth-shell">
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-news" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h5M7 16h10M15 12h2"/></symbol>
+    <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 12l6-6M12 3v2M3 12h2"/></symbol>
+    <symbol id="i-sources" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="4" rx="1"/><rect x="4" y="10" width="16" height="4" rx="1"/><rect x="4" y="16" width="16" height="4" rx="1"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.8 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 3 1.1-6.2L3 9.7l6.2-.9L12 3z"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M8 5v4M16 15v4"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m4 17 5-5 4 4 3-3 5 5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-9 9"/><path d="M19 13v6H5V5h6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 20 6v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5L12 2Z"/></symbol>
+    <symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m4-12 4 4-4 4m-8-4h12"/></symbol>
+  </svg>
+  <section id="auth" class="auth-shell" aria-label="Вход в ОСВЕД">
     <div class="auth-panel">
-      <div class="logomark" aria-hidden="true">◉</div>
-      <p class="eyebrow">OSVED / PRIVATE INTELLIGENCE</p>
-      <h1>Осведомлённость.<br><em>Без шума.</em></h1>
-      <p>Персональная аналитическая панель. В Telegram вход выполняется автоматически; на компьютере можно войти по одноразовому коду из бота ОСВЕД.</p>
+      <div class="auth-top"><span class="identity"><span class="identity-mark">◉</span> ОСВЕД</span><button type="button" class="theme-button" data-theme-toggle aria-label="Переключить тему"><svg><use href="#i-sun"></use></svg></button></div>
+      <p class="eyebrow">PERSONAL INTELLIGENCE OS</p>
+      <h1>Информация<br><span>в полной картине.</span></h1>
+      <p class="auth-description">Новости, источники, исследования и медиалаб в одном пространстве. Доступ только владельцу.</p>
       <form id="code-login-form" class="login-form" autocomplete="off">
-        <label for="login-code">Код из Telegram (12 цифр)</label>
-        <input id="login-code" type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" required autocomplete="one-time-code" placeholder="000000000000" aria-describedby="login-state">
-        <button id="code-login-submit" type="submit">Открыть кабинет</button>
+        <label for="login-code">Одноразовый код из Telegram</label>
+        <input id="login-code" type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" required autocomplete="one-time-code" placeholder="•••• •••• ••••" aria-describedby="login-state">
+        <button id="code-login-submit" type="submit">Войти в кабинет <svg><use href="#i-arrow"></use></svg></button>
       </form>
-      <p class="help-note">Код выдаётся кнопкой <strong>«🔐 Войти на сайте»</strong> в личном чате с ботом. Код действует 5 минут и используется один раз.</p>
-      <p id="login-state" class="auth-note" role="status">Проверка Telegram…</p>
+      <p id="login-state" class="auth-note" role="status">Код выдаётся кнопкой «🔐 Войти на сайте» в боте ОСВЕД.</p>
+      <p class="auth-footnote"><svg><use href="#i-shield"></use></svg> Вход через Telegram Mini App выполняется автоматически. Код действует 5 минут.</p>
     </div>
-  </div>
+  </section>
   <div id="shell" class="shell" hidden aria-label="Личный кабинет ОСВЕД">
     <aside class="sidebar">
-      <a class="brand" href="/" aria-label="ОСВЕД — главная"><span class="brand-icon">◉</span><span>ОСВЕД<small>INTELLIGENCE SYSTEM</small></span></a>
-      <p class="eyebrow side-label">НАВИГАЦИЯ</p>
+      <a class="brand" href="/" aria-label="ОСВЕД — главная"><span class="identity-mark">◉</span><span>ОСВЕД<small>INTELLIGENCE PLATFORM</small></span></a>
+      <div class="workspace-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
       <nav id="nav" aria-label="Разделы">
-        <button class="nav-link selected" data-section="overview">◫ <span>Обзор</span></button>
-        <button class="nav-link" data-section="feed">▤ <span>Моя лента</span></button>
-        <button class="nav-link" data-section="radar">◉ <span>Радар событий</span></button>
-        <button class="nav-link" data-section="sources">◇ <span>Источники</span></button>
-        <button class="nav-link" data-section="saved">☆ <span>Избранное</span></button>
-        <button class="nav-link" data-section="media">▣ <span>Медиалаб</span></button>
-        <button class="nav-link" data-section="settings">⚙ <span>Настройки</span></button>
+        <button type="button" class="nav-link selected" data-section="overview"><svg><use href="#i-grid"></use></svg><span>Обзор</span></button>
+        <button type="button" class="nav-link" data-section="feed"><svg><use href="#i-news"></use></svg><span>Моя лента</span></button>
+        <button type="button" class="nav-link" data-section="radar"><svg><use href="#i-radar"></use></svg><span>Радар событий</span></button>
+        <button type="button" class="nav-link" data-section="saved"><svg><use href="#i-star"></use></svg><span>Избранное</span></button>
+        <button type="button" class="nav-link" data-section="sources"><svg><use href="#i-sources"></use></svg><span>Источники</span></button>
+        <div class="nav-label">ИНСТРУМЕНТЫ</div>
+        <button type="button" class="nav-link" data-section="media"><svg><use href="#i-video"></use></svg><span>Медиалаб</span></button>
+        <button type="button" class="nav-link" data-section="studio"><svg><use href="#i-image"></use></svg><span>Студия иллюстраций</span></button>
+        <button type="button" class="nav-link" data-section="settings"><svg><use href="#i-settings"></use></svg><span>Настройки</span></button>
       </nav>
-      <div class="side-bottom"><span class="signal-dot"></span> ЕДИНАЯ БАЗА · LIVE DATA<p>Проверенные новости отдельно от непроверенных сигналов.</p></div>
+      <div class="side-bottom"><div class="connection"><span class="signal-dot"></span> Личный кабинет</div><p>Ваши источники, чтение и материалы в единой системе.</p></div>
     </aside>
     <div class="work">
-      <header class="topbar"><span class="bread">OSVED <span>/</span> <span id="crumb">ОБЗОР</span></span><div class="top-actions"><span class="live">● LIVE DATA</span><button id="refresh" class="icon-action" aria-label="Обновить данные">↻</button><button id="logout" class="logout-action" type="button">Выйти</button></div></header>
+      <header class="topbar">
+        <div class="breadcrumb">ОСВЕД <span>/</span> <span id="crumb">ОБЗОР</span></div>
+        <div class="top-actions">
+          <span class="live"><span class="signal-dot"></span> PRIVATE</span>
+          <button id="theme-toggle" type="button" class="icon-action" data-theme-toggle aria-label="Переключить тему" title="Светлая / тёмная тема"><svg><use href="#i-sun"></use></svg></button>
+          <button id="refresh" type="button" class="icon-action" aria-label="Обновить данные" title="Обновить"><svg><use href="#i-refresh"></use></svg></button>
+          <button id="logout" type="button" class="logout-action"><svg><use href="#i-log-out"></use></svg><span>Выйти</span></button>
+        </div>
+      </header>
       <main class="content">
-        <div class="heading"><div><p class="eyebrow">YOUR INFORMATION SPACE</p><h1 id="page-title">Информационный обзор</h1><p id="page-description">Факты, события и аналитика — по вашим источникам.</p></div><span class="date" id="current-date"></span></div>
+        <div class="heading"><div><p class="eyebrow">OSVED / DASHBOARD</p><h1 id="page-title">Информационный обзор</h1><p id="page-description">Полная картина из проверенных материалов и сигналов источников.</p></div><span class="date" id="current-date"></span></div>
+        <div class="toolbar"><label class="search-field" for="search"><svg><use href="#i-search"></use></svg><input id="search" type="search" placeholder="Поиск по заголовкам, источникам, событиям…" autocomplete="off"></label><span class="toolbar-note" id="result-count"></span></div>
         <section id="metrics" class="metrics" aria-label="Показатели"></section>
+        <section id="section-tools" class="section-tools"></section>
         <section id="content" class="card-grid" aria-live="polite"></section>
-        <footer>ОСВЕД · Проверенные факты и сырые сигналы всегда разделены · Данные не публикуются открыто</footer>
+        <footer>ОСВЕД / Источники и факты · Сигналы без проверки никогда не выдаются за подтверждённые новости.</footer>
       </main>
+    </div>
+  </div>
+  <div id="dialog-overlay" class="dialog-overlay" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="dialog-head"><span class="eyebrow" id="dialog-label">МАТЕРИАЛ</span><button type="button" id="dialog-close" class="icon-action" aria-label="Закрыть"><svg><use href="#i-close"></use></svg></button></div>
+      <h2 id="dialog-title">Материал</h2>
+      <div id="dialog-body"></div>
+      <div id="dialog-links" class="dialog-links"></div>
     </div>
   </div>
 </body>
