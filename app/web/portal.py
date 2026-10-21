@@ -26,16 +26,18 @@ from app.video.reports import ReportError
 from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
 from app.web.login_codes import ensure_login_schema, redeem_login_code
-from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
 from app.web.personalization import (
     clear_preferences,
-    initialize as initialize_personalization,
     material_topic,
     personalize,
     set_feedback,
     set_priority,
     snapshot,
 )
+from app.web.personalization import (
+    initialize as initialize_personalization,
+)
+from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
 from app.web.sessions import (
     SESSION_SECONDS,
     initialize_sessions,
