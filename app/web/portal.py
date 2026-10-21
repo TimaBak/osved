@@ -26,6 +26,7 @@ from app.video.reports import ReportError
 from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
 from app.web.login_codes import ensure_login_schema, redeem_login_code
+from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
 from app.web.store import DashboardStore
 
 COOKIE = "osved_portal_session"
@@ -234,11 +235,19 @@ async def overview(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
 
     def read():
+        feed = state.store.all_items()[:30]
+        signals = radar_rows(state.repository)
+        for item in [*feed, *signals]:
+            item["language"] = content_language(
+                str(item.get("title") or "") + " " + str(item.get("summary") or "")
+            )
         return {
-            "feed": state.store.all_items()[:30],
-            "radar": radar_rows(state.repository),
+            "feed": feed,
+            "radar": signals,
             "sources": state.store.sources(),
             "health": feed_health(state.repository),
+            "reading": list_notes(state.repository),
+            "locale": "ru-RU",
         }
 
     return web.json_response(await asyncio.to_thread(read))
@@ -372,6 +381,45 @@ async def shutdown(app: web.Application) -> None:
         await asyncio.wait(state.video_tasks, timeout=5)
 
 
+async def reader_item(request: web.Request) -> web.Response:
+    """Read or save personal research notes only for real OSVED materials."""
+    state: PortalState = request.app[STATE]
+    kind = request.match_info["kind"]
+    try:
+        item_id = int(request.match_info["item_id"])
+    except ValueError:
+        return error("invalid_item")
+    if kind not in {"news", "video", "radar"} or not 0 < item_id < 2**31:
+        return error("invalid_item")
+
+    def exists() -> bool:
+        if kind == "radar":
+            with state.repository.connection() as db:
+                return db.execute(
+                    "SELECT 1 FROM events WHERE id=? AND status='candidate'",
+                    (item_id,),
+                ).fetchone() is not None
+        return state.store.item(kind, item_id, detail=False) is not None
+
+    if not await asyncio.to_thread(exists):
+        return error("not_found", 404)
+    if request.method == "GET":
+        result = await asyncio.to_thread(get_note, state.repository, kind, item_id)
+        return web.json_response(result)
+    try:
+        body = await request.json()
+        note = body["note"]
+        is_read = body["is_read"]
+        if not isinstance(note, str) or len(note) > 4000 or type(is_read) is not bool:
+            return error("invalid_note")
+    except (KeyError, ValueError, TypeError):
+        return error("invalid_note")
+    result = await asyncio.to_thread(
+        save_note, state.repository, kind, item_id, note, is_read
+    )
+    return web.json_response(result)
+
+
 async def bookmark(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     try:
@@ -439,6 +487,7 @@ async def startup(app: web.Application) -> None:
     state: PortalState = app[STATE]
     await asyncio.to_thread(state.store.initialize)
     await asyncio.to_thread(ensure_login_schema, state.repository)
+    await asyncio.to_thread(initialize, state.repository)
 
 
 def create_portal(settings: Settings, repository: Repository) -> web.Application:
@@ -455,6 +504,8 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/video/summary", video_summary)
     app.router.add_get("/api/video/jobs/{job_id}", video_job)
     app.router.add_post("/api/bookmark", bookmark)
+    app.router.add_get("/api/reader/{kind}/{item_id}", reader_item)
+    app.router.add_post("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/source", source_update)
     app.router.add_get("/", static)
     app.router.add_get("/{filename}", static)
