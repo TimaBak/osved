@@ -22,11 +22,11 @@ from aiohttp import web
 from app.config import Settings
 from app.db.repository import Repository
 from app.ops.feed_health import feed_health
+from app.video.reports import ReportError
+from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
 from app.web.login_codes import ensure_login_schema, redeem_login_code
 from app.web.store import DashboardStore
-from app.video.reports import ReportError
-from app.video.transcripts import youtube_video_id
 
 COOKIE = "osved_portal_session"
 STATIC = Path(__file__).resolve().parent / "portal_static"
