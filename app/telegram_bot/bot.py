@@ -293,9 +293,15 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             text, keyboard = source_menu(repository)
             await message.answer(text, reply_markup=keyboard)
         elif section == "radar":
+            from app.telegram_bot.navigation import radar_preview
             from app.telegram_bot.sensory import radar_status_text
 
-            await message.answer(radar_status_text(repository), reply_markup=inline_menu("radar"))
+            text, keyboard = radar_preview(repository)
+            await message.answer(
+                radar_status_text(repository),
+                reply_markup=inline_menu("radar"),
+            )
+            await message.answer(text, reply_markup=keyboard)
         elif section == "telegram":
             from app.telegram_bot.telegram_channels import menu
 
