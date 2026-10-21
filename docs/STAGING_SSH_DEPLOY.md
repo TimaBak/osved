@@ -46,3 +46,7 @@ No `OPENROUTER_API_KEY`, Telegram secrets or root credentials are required in Gi
 ## Safety limitations
 
 The root-installed script is part of the trusted computing base. Reviewing the GitHub code alone does not install or activate it. GitHub CI succeeding does not demonstrate Hermes deployment; verify the separate `Staging SSH deployment` run. Only staging is supported by this flow. The currently existing `ci.yml` self-hosted request job remains separate and unprivileged.
+
+## Deployment activation audit — 2026-10-21
+
+The SSH connectivity smoke test passed with the dedicated forced-command account. The release workflow is on main. A successful SSH smoke test is **not** proof that the application deployment has occurred; the first main CI → staging workflow → health check still needs explicit verification. Follow the corresponding GitHub Actions runs and confirm the exact running SHA and container health.
