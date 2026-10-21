@@ -20,6 +20,7 @@ const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
   feed:["Моя лента","Проверенные материалы, подробности и первоисточники."],
   radar:["Радар событий","Публикации на этапе сбора и проверки фактов."],
+  interests:["Мои интересы","Настрой, что ОСВЕД должен показывать чаще и реже. Все рекомендации объяснимы."],
   briefing:["Русская сводка","Краткая картина событий на русском языке с подтверждённым статусом каждого материала."],
   notebook:["Мои заметки","Личный исследовательский архив: комментарии и прочитанные материалы."],
   saved:["Избранное","Сохранённые материалы из кабинета и Telegram."],
@@ -164,6 +165,10 @@ function card(item,kind){
     node.append(el("p","",item.summary||sourceName(item)));
   }
   node.append(el("span","tile-meta",sourceName(item)));
+  if(item.recommendation){
+    const detail=el("p","recommendation-reason","Почему показано: "+item.recommendation.reason);
+    node.append(detail);
+  }
   const actions=el("div","tile-actions");
   actions.append(action("Читать", "news", ()=>openArticle(item,type),"primary-button"));
   const link=external(item.url,"Первоисточник");
@@ -182,6 +187,35 @@ function card(item,kind){
     actions.append(save);
   }
   node.append(actions);
+  const reactions=el("details","reaction-details");
+  const preview=el("summary","","🎯 Настроить рекомендации");
+  reactions.append(preview);
+  const buttons=el("div","reaction-buttons");
+  const current=item.recommendation?.action||null;
+  const options=[
+    ["more","👍 Больше такого"],["less","👎 Меньше такого"],
+    ["not_interested","🚫 Не моё"],["already_known","✓ Уже знаю"],
+    ["deeper","📚 Нужен глубокий разбор"],["follow","🔔 Следить за темой"],
+    ["clear","↺ Сбросить оценку"],
+  ];
+  for(const [reaction,label] of options){
+    const button=action((reaction===current?"● ":"")+label,null,async()=>{
+      button.disabled=true;
+      try{
+        await api("/api/personalization/feedback",{
+          method:"POST",body:JSON.stringify({kind:type,id:item.id,action:reaction})
+        });
+        await loadDashboard();
+      }catch(error){
+        const info=el("span","reaction-error",friendly(error));
+        buttons.append(info);button.disabled=false;
+      }
+    },"secondary-button");
+    if(reaction===current)button.classList.add("chosen");
+    buttons.append(button);
+  }
+  reactions.append(buttons);
+  node.append(reactions);
   return node;
 }
 function heading(section){
@@ -201,6 +235,18 @@ function matches(item){
     .some(value=>String(value||"").toLowerCase().includes(state.query));
 }
 function filter(items){return items.filter(matches);}
+async function changePriority(topic,delta){
+  const next=Math.max(-3,Math.min(3,topic.priority+delta));
+  try{
+    await api("/api/personalization/topic",{
+      method:"POST",body:JSON.stringify({topic:topic.id,priority:next})
+    });
+    await loadDashboard();
+  }catch(error){
+    const message=el("div","reaction-error",friendly(error));
+    $("#section-tools").append(message);
+  }
+}
 function render(){
   if(!state.data)return;
   const {feed,radar,sources,health}=state.data;
@@ -287,6 +333,41 @@ function render(){
   }else if(section==="saved"){
     if(!saved.length)note("Сохранений пока нет","В ленте нажми «Сохранить» на нужном материале.");
     else add(saved,"feed");
+  }else if(section==="interests"){
+    const data=state.data.personalization||{};
+    const topics=Array.isArray(data.topics)?data.topics:[];
+    const intro=el("div","panel");
+    intro.append(el("h2","","Управление информационным потоком"));
+    intro.append(el("p","","От -3 (реже) до +3 (чаще). Реакции на статьи и сигналы дополнительно корректируют порядок. Это прозрачный локальный алгоритм, пока без AI-предсказаний."));
+    intro.append(el("p","caption","Текущее количество оценок: "+(data.feedback_count||0)+". Приоритет меняет порядок, но не удаляет источники и не превращает сигналы в проверенные новости."));
+    $("#section-tools").append(intro);
+    for(const topic of topics){
+      const tile=el("article","tile topic-tile");
+      tile.append(el("div","kicker","ПЕРСОНАЛЬНАЯ ТЕМА"));
+      tile.append(el("h2","",topic.title));
+      const row=el("div","priority-row");
+      const minus=action("−",null,()=>changePriority(topic,-1),"secondary-button");
+      minus.disabled=topic.priority<=-3;
+      const value=el("strong","priority-value",topic.priority>0?"+"+topic.priority:topic.priority);
+      const plus=action("+",null,()=>changePriority(topic,1),"secondary-button");
+      plus.disabled=topic.priority>=3;
+      row.append(minus,value,plus);
+      tile.append(row);
+      tile.append(el("p","",topic.priority>0?"Показывать больше материалов этой темы":topic.priority<0?"Показывать меньше материалов этой темы":"Нейтральный приоритет"));
+      root.append(tile);
+    }
+    const tools=el("div","panel personalization-reset");
+    tools.append(el("h2","","Управление персонализацией"));
+    tools.append(el("p","","Можно сбросить все сохранённые реакции и ручные приоритеты. Избранное и исследовательские заметки сохранятся."));
+    const reset=action("Сбросить мои предпочтения","refresh",async()=>{
+      if(!window.confirm("Сбросить реакции и приоритеты тем? Избранное и заметки останутся."))return;
+      reset.disabled=true;
+      try{
+        await api("/api/personalization/reset",{method:"POST",body:JSON.stringify({confirm:true})});
+        await loadDashboard();
+      }catch(error){tools.append(el("p","reaction-error",friendly(error)));reset.disabled=false;}
+    },"secondary-button");
+    tools.append(reset);$("#section-tools").append(tools);
   }else if(section==="sources"){
     if(!streams.length)note("Источников нет","Добавление источников сейчас выполняется в Telegram.");
     filter(streams).forEach(s=>{
