@@ -30,13 +30,24 @@ grep -Fxq "$HERMES_IPV4" <<< "$dns_addresses" || {
   echo "DNS A record must resolve $DOMAIN to Hermes $HERMES_IPV4" >&2
   exit 1
 }
-[[ ! -e "$SITE" && ! -L "$SITE" && ! -e "$ACTIVE" && ! -L "$ACTIVE" ]] || {
-  echo "A nginx vhost already exists. Refusing to overwrite it." >&2
-  exit 1
-}
-
-# No unknown root-executable source. Generate a minimal fixed reverse proxy only.
-cat > "$SITE" <<'NGINX'
+# A failed Let's Encrypt HTTP-01 challenge leaves the correct nginx
+# reverse proxy in place. Permit retry only for that exact pre-existing proxy.
+# Never overwrite any unrelated domain configuration.
+created_site=0
+if [[ -e "$SITE" || -L "$SITE" || -e "$ACTIVE" || -L "$ACTIVE" ]]; then
+  if [[ -f "$SITE" && -L "$ACTIVE" ]] &&
+      [[ "$(readlink "$ACTIVE")" == "$SITE" ]] &&
+      grep -Fq 'server_name osved.tima.biz;' "$SITE" &&
+      grep -Fq 'proxy_pass http://127.0.0.1:18765;' "$SITE"; then
+    echo "Recognized existing OSVED reverse proxy; retrying certificate setup."
+  else
+    echo "A different nginx vhost already exists. Refusing to overwrite it." >&2
+    exit 1
+  fi
+else
+  created_site=1
+  # No unknown root-executable source. Generate a fixed reverse proxy only.
+  cat > "$SITE" <<'NGINX'
 server {
     listen 80;
     server_name osved.tima.biz;
@@ -54,12 +65,17 @@ server {
     }
 }
 NGINX
-chmod 644 "$SITE"
-ln -s "$SITE" "$ACTIVE"
+  chmod 644 "$SITE"
+  ln -s "$SITE" "$ACTIVE"
+fi
 if ! nginx -t; then
-  rm -f "$ACTIVE" "$SITE"
+  if [[ "$created_site" -eq 1 ]]; then
+    rm -f "$ACTIVE" "$SITE"
+    echo "New OSVED vhost rolled back after nginx validation failure." >&2
+  else
+    echo "Existing OSVED vhost preserved; fix nginx validation errors." >&2
+  fi
   nginx -t || true
-  echo "nginx validation failed; new vhost rolled back" >&2
   exit 1
 fi
 systemctl reload nginx
