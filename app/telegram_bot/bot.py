@@ -15,11 +15,13 @@ from aiogram.types import (
     BotCommand,
     CallbackQuery,
     ForceReply,
+    InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputRichMessage,
     LinkPreviewOptions,
     Message,
     ReplyParameters,
+    WebAppInfo,
 )
 
 from app.config import DeliveryFormat, Settings
@@ -382,12 +384,31 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             )
             await message.answer(intelligence_message(result, "weekly_map"))
         elif section == "site":
-            await message.answer(
-                "🌐 Веб-кабинет osved.tima.biz пока готовится. "
-                "Авторизация для публичного доступа ещё не настроена; "
-                "не обещаю вход до реального деплоя.",
-                reply_markup=inline_menu("settings"),
-            )
+            # WebApp launch supplies signed initData to the frontend. Do not
+            # advertise a dead or unconfigured public HTTPS endpoint.
+            if settings.osved_web_url == "https://osved.tima.biz":
+                await message.answer(
+                    "🌐 <b>ОСВЕД — веб-кабинет</b>\n"
+                    "Открыть из Telegram для подтверждения личности.",
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[[
+                            InlineKeyboardButton(
+                                text="🌐 Открыть кабинет",
+                                web_app=WebAppInfo(url=settings.osved_web_url),
+                            )
+                        ], [
+                            InlineKeyboardButton(
+                                text="🏠 Главная", callback_data="osved_menu:home"
+                            )
+                        ]]
+                    ),
+                )
+            else:
+                await message.answer(
+                    "🌐 Веб-кабинет находится в настройке HTTPS. "
+                    "Telegram-вход станет доступен после проверки домена.",
+                    reply_markup=inline_menu("settings"),
+                )
 
     @router.message(Command("start"))
     async def start_handler(message: Message) -> None:
