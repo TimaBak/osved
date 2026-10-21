@@ -1,6 +1,6 @@
 """Activation script must remain syntactically valid and fail closed."""
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 
 def test_https_activation_shell_is_valid():
