@@ -50,3 +50,11 @@ The root-installed script is part of the trusted computing base. Reviewing the G
 ## Deployment activation audit — 2026-10-21
 
 The SSH connectivity smoke test passed with the dedicated forced-command account. The release workflow is on main. A successful SSH smoke test is **not** proof that the application deployment has occurred; the first main CI → staging workflow → health check still needs explicit verification. Follow the corresponding GitHub Actions runs and confirm the exact running SHA and container health.
+
+## Workflow recovery / dispatch (2026-10-21)
+
+- `Checks` has `push`, `pull_request`, `workflow_dispatch` and hourly `schedule` triggers. Scheduled checks are a fallback when commits created via some GitHub integrations do not produce a push-triggered run. Scheduled runs execute on the default branch; GitHub may delay them.
+- `Staging SSH deployment` is an **independent workflow** triggered automatically by successful `Checks` completion on `main`. It also has `workflow_dispatch` restricted to `main`; manual deployment first verifies a successful `Checks` workflow run for the exact commit through the GitHub API.
+- Deploy account continues to accept only the exact latest `origin/main` SHA over restricted SSH. No remote arbitrary shell commands.
+- If CI is red, fix tests and trigger `Checks` manually. If CI is green and no automatic deployment appears, inspect `Staging SSH deployment` separately, then run it manually on `main` for that same SHA.
+- **Not yet verified:** the actual first production/staging deployment and healthy runtime on Hermes. A YAML file or healthy SSH smoke alone does not establish a release.
