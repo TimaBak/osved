@@ -54,9 +54,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runs=$(curl --fail --silent --show-error \\
-            -H "Authorization: Bearer $GH_TOKEN" \\
-            -H "Accept: application/vnd.github+json" \\
+          runs=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$COMMIT&status=success&per_page=30")
           jq -e --arg sha "$COMMIT" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .conclusion == "success")] | length > 0' <<< "$runs" >/dev/null || {
             echo "Refusing manual release: main commit has no successful Checks run."
@@ -64,7 +64,7 @@ jobs:
           }
       - name: Submit exact SHA to restricted SSH account
         env:
-          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           DEPLOY_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.OSVED_DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.OSVED_DEPLOY_KEY }}
