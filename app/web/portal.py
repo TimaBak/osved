@@ -140,6 +140,13 @@ def new_session(state: PortalState) -> web.Response:
     return response
 
 
+async def session_status(request: web.Request) -> web.Response:
+    session = request.app[STATE].session(request)
+    if session is None:
+        return error("unauthorized", 401)
+    return web.json_response({"ok": True, "csrf": session[0]})
+
+
 async def code_login(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     from app.telegram_bot.bot import configured_owner_id
@@ -260,7 +267,8 @@ async def source_update(request: web.Request) -> web.Response:
         enabled = data["enabled"]
         if (
             not isinstance(source_id, str)
-            or re.fullmatch(r"[a-z0-9_]{1,80}", source_id) is None
+            or not 1 <= len(source_id) <= 160
+            or re.search(r"[\\x00-\\x1f]", source_id)
             or type(enabled) is not bool
         ):
             return error("invalid_source")
@@ -304,6 +312,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app = web.Application(middlewares=[secure_headers, protect], client_max_size=12_000)
     app[STATE] = PortalState(settings, repository)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get("/api/session", session_status)
     app.router.add_post("/api/session", session_create)
     app.router.add_post("/api/code-login", code_login)
     app.router.add_post("/api/logout", logout)
