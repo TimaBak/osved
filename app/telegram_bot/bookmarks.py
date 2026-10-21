@@ -76,14 +76,20 @@ def bookmark_markup(
     *,
     saved: bool = False,
 ) -> InlineKeyboardMarkup:
-    keyboard.inline_keyboard.append(
-        [
-            InlineKeyboardButton(
-                text="✅ В избранном" if saved else "⭐ Сохранить",
-                callback_data=f"osved_save:{delivery_id}",
-            )
-        ]
+    row = [
+        InlineKeyboardButton(
+            text="✅ В избранном" if saved else "⭐ Сохранить",
+            callback_data=f"osved_save:{delivery_id}",
+        )
+    ]
+    # Keep «Подробнее» in the last row for existing navigation and reactions.
+    last_row = keyboard.inline_keyboard[-1] if keyboard.inline_keyboard else []
+    has_detail = any(
+        (button.callback_data or "").startswith(("nd:", "dt:"))
+        for button in last_row
     )
+    at = len(keyboard.inline_keyboard) - (1 if has_detail else 0)
+    keyboard.inline_keyboard.insert(at, row)
     return keyboard
 
 
