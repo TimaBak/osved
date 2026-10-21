@@ -32,7 +32,16 @@ async function start(){
   // Direct browser and Telegram WebApp are two supported paths. Never render
   // private sections before a validated session and API response.
   if(!tg || !tg.initData){
-    showAuth("Для входа с компьютера запроси код в боте ОСВЕД и введи его выше.");
+    // A Secure HttpOnly cookie survives a browser reload. The server returns
+    // CSRF only for an authenticated, unexpired session.
+    try{
+      const prior=await api("/api/session");
+      state.csrf=prior.csrf;
+      await loadDashboard();
+      return;
+    }catch(_){
+      showAuth("Для входа с компьютера запроси код в боте ОСВЕД и введи его выше.");
+    }
     return;
   }
   try{
