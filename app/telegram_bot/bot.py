@@ -28,6 +28,8 @@ from app.details.research import evaluate_detail_source_gate
 from app.details.worker import DetailWorker
 from app.llm.openrouter import CardDraft
 from app.ops.feed_health import feed_health, feed_health_text
+from app.pipeline.cards import render_article_rich_html
+from app.pipeline.telegram_style import clean_news_html
 from app.telegram_bot.bookmarks import (
     bookmark_markup,
     is_bookmarked,
@@ -35,14 +37,6 @@ from app.telegram_bot.bookmarks import (
     saved_news,
     toggle_delivery,
 )
-from app.telegram_bot.navigation import (
-    TEXT_TO_SECTION,
-    inline_menu,
-    parse_section,
-    persistent_keyboard,
-)
-from app.pipeline.cards import render_article_rich_html
-from app.pipeline.telegram_style import clean_news_html
 from app.telegram_bot.feedback import FeedbackAction, Reaction, reaction_from_action
 from app.telegram_bot.keyboards import (
     DetailFeedbackAction,
@@ -54,6 +48,12 @@ from app.telegram_bot.keyboards import (
     detail_feedback_keyboard,
     reaction_keyboard,
     superreaction_keyboard,
+)
+from app.telegram_bot.navigation import (
+    TEXT_TO_SECTION,
+    inline_menu,
+    parse_section,
+    persistent_keyboard,
 )
 from app.telegram_bot.news_demo import NewsDemoCallback, handle_news_demo
 from app.telegram_bot.news_depth import brief_card_html, depth_key
@@ -174,6 +174,7 @@ def delivery_keyboard(
     if current is None:
         current_value = repository.current_reaction(delivery_id)
         current = Reaction(current_value) if current_value else None
+    context = repository.get_delivery_context(delivery_id)
     return bookmark_markup(
         reaction_keyboard(
             delivery_id,
@@ -183,7 +184,7 @@ def delivery_keyboard(
             expanded=expanded,
         ),
         delivery_id,
-        saved=is_bookmarked(repository, int(repository.get_delivery_context(delivery_id)["card_id"])),
+        saved=bool(context and is_bookmarked(repository, int(context["card_id"]))),
     )
 
 
@@ -266,10 +267,15 @@ def build_router(settings: Settings, repository: Repository) -> Router:
             if result.get("status") != "sent":
                 labels = {
                     "waiting_for_rating": "Оцени предыдущую новость, чтобы увидеть следующую.",
-                    "queue_empty": "Пока нет проверенных новостей. Система не выдаёт непроверенные материалы за новости.",
+                    "queue_empty": (
+                        "Пока нет проверенных новостей. "
+                        "Непроверенные материалы в ленту не попадают."
+                    ),
                     "sending": "Новость уже отправляется.",
                     "queue_disabled": "Лента пока не включена.",
-                    "delivery_confirmation_needed": "Невозможно подтвердить отправку. Проверь последние сообщения.",
+                    "delivery_confirmation_needed": (
+                        "Невозможно подтвердить отправку. Проверь последние сообщения."
+                    ),
                 }
                 await message.answer(
                     "📰 <b>Моя лента</b>\n\n"
@@ -321,7 +327,9 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                     reply_markup=saved_links(rows),
                 )
             else:
-                await message.answer("⭐ Избранное пока пусто. Сохраняй новости кнопкой под карточкой.")
+                await message.answer(
+                    "⭐ Избранное пока пусто. Сохраняй новости кнопкой под карточкой."
+                )
             await message.answer("Разделы", reply_markup=inline_menu("favorites"))
         elif section == "topics":
             from app.config import load_interest_profile
@@ -336,8 +344,10 @@ def build_router(settings: Settings, repository: Repository) -> Router:
                 reply_markup=inline_menu("topics"),
             )
         elif section == "preferences":
-            from app.radar.preference_patches import build_preference_report
-            from app.radar.preference_patches import render_preference_report
+            from app.radar.preference_patches import (
+                build_preference_report,
+                render_preference_report,
+            )
 
             report = build_preference_report(
                 repository, days=30, chat_id=message.chat.id, max_patches=5
