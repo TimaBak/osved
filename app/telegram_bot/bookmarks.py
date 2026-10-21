@@ -5,8 +5,8 @@ from urllib.parse import urlsplit
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.db.repository import Repository, utc_now
 from app.db.card_predicates import finished_card_sql
+from app.db.repository import Repository, utc_now
 
 
 def ensure_bookmarks(repository: Repository) -> None:
