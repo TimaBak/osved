@@ -55,6 +55,26 @@ const { chromium } = require("playwright");
         health: { status: "ok", news_24h: 1, last_news_at: null },
       }),
     }));
+    await page.route("**/api/article/news/1", route => route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({item:{
+        kind:"news",id:1,title:"Проверенный пример",
+        content:{brief:"<p>Полный проверенный материал <b>с первоисточником</b>.</p>"},
+        sources:[{title:"Источник",url:"https://example.org/article"}],
+      }}),
+    }));
+    await page.route("**/api/radar/2", route => route.fulfill({
+      status: 200,contentType:"application/json",
+      body: JSON.stringify({item:{
+        kind:"radar",id:2,title:"Предварительный сигнал",
+        verified:false,content:{brief:"<p>Описание исходного сигнала</p>"},
+        sources:[{title:"Первоисточник",url:"https://example.org/"}],
+      }}),
+    }));
+    await page.route("**/api/video/summary", route => route.fulfill({
+      status: 409,contentType:"application/json",
+      body: '{"error":"ai_provider_unconfigured"}',
+    }));
     await page.route("**/api/source", route => route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({ id: "rss:example.org", enabled: false }),
@@ -74,6 +94,28 @@ const { chromium } = require("playwright");
     await page.getByText("ПАУЗА").waitFor({state:"visible"});
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
+    await page.locator("#theme-toggle").click();
+    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
+    await page.locator("#theme-toggle").click();
+    assert.equal(await page.locator("html").getAttribute("data-theme"),"light");
+    await page.locator("#search").fill("неттакогозаголовка");
+    await page.getByText("Ничего не найдено").waitFor({state:"visible"});
+    await page.locator("#search").fill("");
+    await page.locator("#content .primary-button").first().click();
+    await page.getByText("Полный проверенный материал",{exact:false}).waitFor({state:"visible"});
+    assert.equal(await page.locator("#dialog-overlay").isVisible(),true);
+    await page.locator("#dialog-close").click();
+    assert.equal(await page.locator("#dialog-overlay").isVisible(),false);
+    await page.locator('[data-section="media"]').click();
+    await page.locator("#youtube-url").fill("https://www.youtube.com/watch?v=ABCDEFGHIjk");
+    await page.locator("#youtube-form .primary-button").click();
+    await page.getByText("AI-провайдер для выжимок не настроен",{exact:false}).waitFor({state:"visible"});
+    await page.locator('[data-section="studio"]').click();
+    await page.locator("#studio-prompt").fill("Орбиты и глобальные технологии");
+    await page.locator("#studio-generate").click();
+    assert.equal(await page.locator("#studio-preview svg").count(),1);
+    assert.equal(await page.locator("#studio-download").isVisible(),true);
+    await page.locator('[data-section="feed"]').click();
     // Verify the genuine raw-signal fallback is usable when no news passed
     // the evidence gates, rather than displaying an inert empty page.
     editorialReady = false;
