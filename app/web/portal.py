@@ -108,11 +108,10 @@ async def protect(request: web.Request, handler):
         session = request.app[STATE].session(request)
         if session is None:
             return error("unauthorized", 401)
-        if request.method not in {"GET", "HEAD"}:
-            if not hmac.compare_digest(
-                request.headers.get("X-CSRF-Token", ""), session[0]
-            ):
-                return error("csrf", 403)
+        if request.method not in {"GET", "HEAD"} and not hmac.compare_digest(
+            request.headers.get("X-CSRF-Token", ""), session[0]
+        ):
+            return error("csrf", 403)
     if request.method not in {"GET", "HEAD"}:
         origin = request.headers.get("Origin")
         if origin and origin != f"https://{hostname}" and origin != f"http://{request.host}":
