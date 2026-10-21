@@ -5,9 +5,11 @@ on:
     workflows: ["Checks"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: osved-staging-ssh
@@ -16,17 +18,19 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_repository.full_name == 'TimaBak/osved' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.repository == 'TimaBak/osved'
+      github.repository == 'TimaBak/osved' &&
+      ((github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == 'TimaBak/osved' &&
+        github.event.workflow_run.head_branch == 'main') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 15
     steps:
       - name: Validate source commit and SSH deployment configuration
         env:
-          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           DEPLOY_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.OSVED_DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.OSVED_DEPLOY_KEY }}
@@ -42,6 +46,22 @@ jobs:
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
           [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           echo "Deploying reviewed main commit $COMMIT to staging"
+      - name: Verify completed main Checks for manual deployment
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(curl --fail --silent --show-error \\
+            -H "Authorization: Bearer $GH_TOKEN" \\
+            -H "Accept: application/vnd.github+json" \\
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$COMMIT&status=success&per_page=30")
+          jq -e --arg sha "$COMMIT" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .conclusion == "success")] | length > 0' <<< "$runs" >/dev/null || {
+            echo "Refusing manual release: main commit has no successful Checks run."
+            exit 1
+          }
       - name: Submit exact SHA to restricted SSH account
         env:
           COMMIT: ${{ github.event.workflow_run.head_sha }}
