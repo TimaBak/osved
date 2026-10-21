@@ -28,29 +28,28 @@ git -C "$source_dir" fetch --no-tags origin main
 git -C "$source_dir" checkout --detach "$release_sha"
 # The deploy script is root-owned outside the checkout so repository changes
 # alone cannot rewrite the privileged deployment entrypoint.
-if ! /usr/local/sbin/osved-root-deploy "$source_dir"; then
-  echo "Deploy failed. Reverting to $previous_sha" >&2
+verify_health() {
+  cd "$app_dir"
+  local container_id status
+  container_id=$(docker compose ps -q newsfeed)
+  [[ -n "$container_id" ]] || return 1
+  for attempt in $(seq 1 18); do
+    status=$(docker inspect -f '{{.State.Health.Status}}' "$container_id")
+    [[ "$status" == healthy ]] && return 0
+    [[ "$status" == unhealthy ]] && return 1
+    sleep 10
+  done
+  return 1
+}
+if ! (/usr/local/sbin/osved-root-deploy "$source_dir" && verify_health); then
+  echo "Deploy or healthcheck failed. Reverting to $previous_sha" >&2
   git -C "$source_dir" checkout --detach "$previous_sha"
-  /usr/local/sbin/osved-root-deploy "$source_dir" || {
-    echo "Rollback failed; manual recovery required" >&2; exit 1;
-  }
+  if ! (/usr/local/sbin/osved-root-deploy "$source_dir" && verify_health); then
+    echo "Rollback failed; manual recovery required" >&2
+    exit 1
+  fi
   exit 1
 fi
 cd "$app_dir"
-# A container that merely starts is not a verified healthy deployment.
-container_id=$(docker compose ps -q newsfeed)
-[[ -n "$container_id" ]] || { echo "Missing newsfeed container" >&2; exit 1; }
-for attempt in $(seq 1 18); do
-  status=$(docker inspect -f '{{.State.Health.Status}}' "$container_id")
-  if [[ "$status" == healthy ]]; then
-    break
-  fi
-  if [[ "$status" == unhealthy ]]; then
-    echo "Healthcheck failed" >&2
-    exit 1
-  fi
-  sleep 10
-done
-[[ "$(docker inspect -f '{{.State.Health.Status}}' "$container_id")" == healthy ]] || exit 1
 docker compose ps newsfeed
 echo "OSVED staging deployed commit $release_sha"
