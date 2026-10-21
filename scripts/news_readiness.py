@@ -35,7 +35,7 @@ def diagnose(database: Path) -> dict:
                 "SELECT COUNT(*) FROM event_fact_sheets WHERE validation_status='valid'"
             ),
             "ready_dossiers": scalar(
-                "SELECT COUNT(*) FROM event_dossiers WHERE status='ready'"
+                "SELECT COUNT(*) FROM event_dossiers WHERE decision='ready' AND validation_status='valid'"
             ),
             "sent_deliveries": scalar(
                 "SELECT COUNT(*) FROM deliveries WHERE delivery_status='sent'"
