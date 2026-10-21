@@ -57,5 +57,10 @@ def test_delivery_bookmarks_are_durable_and_owner_restricted(tmp_path):
 
 def test_bookmark_button_uses_delivery_id():
     keyboard = bookmark_markup(reaction_keyboard(17), delivery_id=17, saved=True)
-    assert keyboard.inline_keyboard[-1][0].callback_data == "osved_save:17"
-    assert "В избранном" in keyboard.inline_keyboard[-1][0].text
+    bookmarks = [
+        button for row in keyboard.inline_keyboard for button in row
+        if button.callback_data == "osved_save:17"
+    ]
+    assert len(bookmarks) == 1
+    assert "В избранном" in bookmarks[0].text
+    assert keyboard.inline_keyboard[-1][0].text == "Подробнее"
