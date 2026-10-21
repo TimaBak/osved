@@ -8,12 +8,18 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import urllib.request
 from pathlib import Path
 
 from app.collectors.ingest import redact_text
 
 
-def diagnose(database: Path, *, openrouter_configured: bool | None = None) -> dict:
+def diagnose(
+    database: Path,
+    *,
+    openrouter_configured: bool | None = None,
+    portal_reachable: bool | None = None,
+) -> dict:
     # URI mode=ro prevents this command from modifying production data.
     connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
@@ -84,6 +90,10 @@ def diagnose(database: Path, *, openrouter_configured: bool | None = None) -> di
             "schedule_enabled": settings.get("schedule_enabled"),
             "schedule_dry_run": settings.get("schedule_dry_run"),
             "service_last_tick": settings.get("service_last_tick"),
+            "portal": {
+                "backend_reachable": portal_reachable,
+                "public_https_verified": False,
+            },
             "card_provider": {
                 "name": "openrouter",
                 "configured": openrouter_configured,
@@ -103,6 +113,18 @@ def diagnose(database: Path, *, openrouter_configured: bool | None = None) -> di
         connection.close()
 
 
+def portal_health() -> bool:
+    """Probe only the known internal Compose service; never the public network."""
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open("http://portal:8080/healthz", timeout=3) as response:
+            if response.status != 200:
+                return False
+            return json.loads(response.read(1024)) == {"status": "alive"}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, required=True)
@@ -116,7 +138,11 @@ def main() -> None:
     configured = Settings().openrouter_api_key is not None
     print(
         json.dumps(
-            diagnose(args.db, openrouter_configured=configured),
+            diagnose(
+                args.db,
+                openrouter_configured=configured,
+                portal_reachable=portal_health(),
+            ),
             ensure_ascii=False,
             indent=2,
         )
