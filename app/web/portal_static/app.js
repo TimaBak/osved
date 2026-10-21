@@ -503,19 +503,33 @@ async function refresh(){
   }
 }
 async function start(){
+  // A valid owner cookie takes precedence even inside Telegram. Reposting old
+  // initData on every reload could fail its ten-minute validity check.
+  try{
+    const prior=await api("/api/session");
+    state.csrf=prior.csrf;
+    await loadDashboard();
+    return;
+  }catch(error){
+    if(error.status!==401){
+      showAuth("Не удалось проверить сохранённый вход. Проверь соединение и обнови страницу.");
+      return;
+    }
+  }
   if(!tg||!tg.initData){
-    try{
-      const prior=await api("/api/session");state.csrf=prior.csrf;
-      await loadDashboard();return;
-    }catch(_){showAuth("Входи по одноразовому коду из бота ОСВЕД. Код действует 5 минут.");}
+    showAuth("Войди по одноразовому коду из Telegram. На этом устройстве вход сохранится на 30 дней.");
     return;
   }
   try{
     tg.ready();tg.expand();
-    const result=await api("/api/session",{method:"POST",body:JSON.stringify({init_data:tg.initData})});
+    const result=await api("/api/session",{
+      method:"POST",body:JSON.stringify({init_data:tg.initData})
+    });
     state.csrf=result.csrf;
     await loadDashboard();
-  }catch(_){showAuth("Автоматический вход Telegram не завершён. Можно войти по одноразовому коду.");}
+  }catch(_){
+    showAuth("Telegram не подтвердил новый вход. Получи одноразовый код в боте.");
+  }
 }
 $("#code-login-form").addEventListener("submit",async event=>{
   event.preventDefault();
