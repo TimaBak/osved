@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
+      - uses: actions/checkout@v4
       - name: Verify public TLS and owner-only API
         shell: bash
         run: |
@@ -65,3 +66,10 @@ jobs:
           }
           echo 'External TLS health, HTML dashboard, and anonymous API deny: PASS' \
             >> "$GITHUB_STEP_SUMMARY"
+      - name: Check actual browser visibility and navigation (Chromium mobile)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install chromium --with-deps
+          node tests/browser/portal-smoke.cjs
