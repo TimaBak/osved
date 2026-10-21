@@ -37,5 +37,20 @@ if ! /usr/local/sbin/osved-root-deploy "$source_dir"; then
   exit 1
 fi
 cd "$app_dir"
+# A container that merely starts is not a verified healthy deployment.
+container_id=$(docker compose ps -q newsfeed)
+[[ -n "$container_id" ]] || { echo "Missing newsfeed container" >&2; exit 1; }
+for attempt in $(seq 1 18); do
+  status=$(docker inspect -f '{{.State.Health.Status}}' "$container_id")
+  if [[ "$status" == healthy ]]; then
+    break
+  fi
+  if [[ "$status" == unhealthy ]]; then
+    echo "Healthcheck failed" >&2
+    exit 1
+  fi
+  sleep 10
+done
+[[ "$(docker inspect -f '{{.State.Health.Status}}' "$container_id")" == healthy ]] || exit 1
 docker compose ps newsfeed
 echo "OSVED staging deployed commit $release_sha"
