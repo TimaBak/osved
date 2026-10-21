@@ -10,8 +10,10 @@ import json
 import sqlite3
 from pathlib import Path
 
+from app.collectors.ingest import redact_text
 
-def diagnose(database: Path) -> dict:
+
+def diagnose(database: Path, *, openrouter_configured: bool | None = None) -> dict:
     # URI mode=ro prevents this command from modifying production data.
     connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
@@ -53,7 +55,7 @@ def diagnose(database: Path) -> dict:
                 "job_type": row["job_type"],
                 "status": row["status"],
                 "slot_at": row["slot_at"],
-                "error": (row["error"] or "")[:200],
+                "error": redact_text(str(row["error"] or ""))[:200],
             }
             for row in connection.execute(
                 "SELECT job_type,status,slot_at,error FROM schedule_slots "
@@ -61,6 +63,8 @@ def diagnose(database: Path) -> dict:
             )
         ]
         issues: list[str] = []
+        if openrouter_configured is False:
+            issues.append("card_provider_unconfigured")
         if settings.get("schedule_enabled") != "true":
             issues.append("schedule_disabled")
         elif settings.get("schedule_dry_run") != "false":
@@ -80,6 +84,15 @@ def diagnose(database: Path) -> dict:
             "schedule_enabled": settings.get("schedule_enabled"),
             "schedule_dry_run": settings.get("schedule_dry_run"),
             "service_last_tick": settings.get("service_last_tick"),
+            "card_provider": {
+                "name": "openrouter",
+                "configured": openrouter_configured,
+            },
+            "live_publication_ready": (
+                settings.get("schedule_enabled") == "true"
+                and settings.get("schedule_dry_run") == "false"
+                and openrouter_configured is True
+            ),
             "counts": counts,
             "issues": issues,
             "recent_slots": recent_slots,
@@ -96,7 +109,18 @@ def main() -> None:
     args = parser.parse_args()
     if not args.db.is_file():
         parser.error("database does not exist")
-    print(json.dumps(diagnose(args.db), ensure_ascii=False, indent=2))
+    # No credentials leave this process: only the boolean configuration state
+    # of the provider actually used by the existing generation pipeline.
+    from app.config import Settings
+
+    configured = Settings().openrouter_api_key is not None
+    print(
+        json.dumps(
+            diagnose(args.db, openrouter_configured=configured),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
