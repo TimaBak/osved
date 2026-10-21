@@ -5,8 +5,12 @@ All callback names stay below Telegram's 64-byte limit.
 """
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
-from aiogram.types import ReplyKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 LABELS = {
     "home": "🏠 Главная",
