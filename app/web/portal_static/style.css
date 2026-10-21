@@ -177,3 +177,23 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
 .reader-check input{accent-color:var(--primary-strong);width:16px;height:16px}
 .language-notice{background:var(--primary-soft);color:var(--text)!important;padding:13px 16px;border:1px solid var(--border-strong);border-radius:11px;font-size:12px!important}
 @media(max-width:740px){.briefing-panel{padding:18px}}
+
+
+/* Transparent personalization controls: consistent in both themes. */
+.recommendation-reason{display:block!important;-webkit-line-clamp:unset!important;overflow:visible!important;
+  color:var(--muted)!important;font-size:11px!important;padding:10px 12px;
+  border:1px solid var(--border);border-radius:10px;background:var(--surface-alt)}
+.reaction-details{margin-top:0;border-top:1px solid var(--border);padding-top:10px}
+.reaction-details summary{display:list-item;cursor:pointer;color:var(--primary);font-weight:720;font-size:12px;padding:8px 4px}
+.reaction-details summary:hover{color:var(--text)}
+.reaction-buttons{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.reaction-buttons button{font-size:11px;padding:8px 10px;min-height:35px}
+.reaction-buttons .chosen{background:var(--primary-soft);outline:2px solid var(--primary)}
+.reaction-error{color:var(--warning);font-size:12px;padding:8px}
+.topic-tile{min-height:175px;gap:11px}
+.priority-row{display:flex;align-items:center;gap:10px}
+.priority-row .secondary-button{width:40px;height:37px;font-size:22px;line-height:1}
+.priority-value{display:grid;place-items:center;min-width:42px;height:37px;
+  font-variant-numeric:tabular-nums;background:var(--primary-soft);
+  color:var(--primary);border-radius:9px}
+.personalization-reset{margin-top:16px}
