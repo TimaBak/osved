@@ -1,0 +1,64 @@
+name: OSVED administration
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Read-only OSVED operation"
+        required: true
+        type: choice
+        options:
+          - status
+          - doctor
+          - news-readiness
+
+permissions:
+  contents: read
+
+concurrency:
+  group: osved-admin-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    if: github.repository == 'TimaBak/osved' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 5
+    steps:
+      - name: Run restricted OSVED diagnostic on Hermes
+        shell: bash
+        env:
+          OPERATION: ${{ inputs.operation }}
+          ADMIN_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
+          ADMIN_USER: ${{ vars.OSVED_DEPLOY_USER }}
+          ADMIN_KEY: ${{ secrets.OSVED_ADMIN_KEY }}
+          KNOWN_HOSTS: ${{ secrets.OSVED_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            status|doctor|news-readiness) ;;
+            *) echo 'Unsupported operation' >&2; exit 2 ;;
+          esac
+          test -n "$ADMIN_HOST"
+          test -n "$ADMIN_USER"
+          test -n "$ADMIN_KEY"
+          test -n "$KNOWN_HOSTS"
+          [[ "$ADMIN_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "$ADMIN_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          key_file=$(mktemp "$HOME/.ssh/osved_admin_key.XXXXXX")
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$ADMIN_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          ssh -F /dev/null -T -i "$key_file" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            "$ADMIN_USER@$ADMIN_HOST" "$OPERATION"
+          echo "OSVED diagnostic completed: $OPERATION" >> "$GITHUB_STEP_SUMMARY"
