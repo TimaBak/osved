@@ -33,15 +33,16 @@ const { chromium } = require("playwright");
       contentType: "application/json",
       body: JSON.stringify({ ok: true, csrf: "frontend-smoke-token" }),
     }));
+    let editorialReady = true;
     await page.route("**/api/overview", route => route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        feed: [
+        feed: editorialReady ? [
           { kind: "news", id: 1, title: "Проверенный пример",
             summary: "Редакционный материал", saved: false,
             url: "https://example.org/article" },
-        ],
+        ] : [],
         radar: [
           { id: 2, title: "Предварительный сигнал",
             source: "Пример источника", verified: false,
@@ -73,6 +74,12 @@ const { chromium } = require("playwright");
     await page.getByText("ПАУЗА").waitFor({state:"visible"});
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
+    // Verify the genuine raw-signal fallback is usable when no news passed
+    // the evidence gates, rather than displaying an inert empty page.
+    editorialReady = false;
+    await page.locator("#refresh").click();
+    await page.getByText("СИГНАЛЫ ИСТОЧНИКОВ · НЕПРОВЕРЕННЫЕ").waitFor({state:"visible"});
+    await page.getByText("Предварительный сигнал").waitFor({state:"visible"});
     await page.locator("#logout").click();
     await page.locator("#auth").waitFor({state:"visible"});
     assert.equal(await page.locator("#shell").isVisible(), false);
