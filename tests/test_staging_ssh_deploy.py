@@ -1,10 +1,9 @@
 """Static release-gate regression: never execute production deployment in tests."""
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import yaml
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
