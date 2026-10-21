@@ -1,0 +1,71 @@
+name: Staging SSH deployment
+
+on:
+  workflow_run:
+    workflows: ["Checks"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: osved-staging-ssh
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == 'TimaBak/osved' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.repository == 'TimaBak/osved'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Validate source commit and SSH deployment configuration
+        env:
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.OSVED_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.OSVED_DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.OSVED_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          echo "Deploying reviewed main commit $COMMIT to staging"
+      - name: Submit exact SHA to restricted SSH account
+        env:
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.OSVED_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.OSVED_DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.OSVED_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          key_file=$(mktemp "$HOME/.ssh/osved_key.XXXXXX")
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$COMMIT" | ssh \
+            -F /dev/null \
+            -i "$key_file" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            "$DEPLOY_USER@$DEPLOY_HOST"
