@@ -1,6 +1,12 @@
 name: OSVED administration
 
 on:
+  # A successful deployment triggers a read-only diagnostic with no manual
+  # workflow_dispatch. Keep the existing manual operations for targeted checks.
+  workflow_run:
+    workflows: ["Staging SSH deployment"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       operation:
@@ -21,7 +27,14 @@ concurrency:
 
 jobs:
   diagnose:
-    if: github.repository == 'TimaBak/osved' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository == 'TimaBak/osved' &&
+      ((github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == 'TimaBak/osved' &&
+        github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 5
@@ -29,7 +42,7 @@ jobs:
       - name: Run restricted OSVED diagnostic on Hermes
         shell: bash
         env:
-          OPERATION: ${{ inputs.operation }}
+          OPERATION: ${{ github.event_name == 'workflow_dispatch' && inputs.operation || 'news-readiness' }}
           ADMIN_HOST: ${{ vars.OSVED_DEPLOY_HOST }}
           ADMIN_USER: ${{ vars.OSVED_DEPLOY_USER }}
           ADMIN_KEY: ${{ secrets.OSVED_ADMIN_KEY }}
