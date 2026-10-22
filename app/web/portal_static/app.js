@@ -32,6 +32,9 @@ const labels={
 };
 const errors={
   github_oauth_unconfigured:"GitHub OAuth ещё не настроен на сервере.",
+  source_paused:"Источник на паузе. Сначала включи его.",
+  source_manual_check_unsupported:"Ручная проверка доступна только для бесплатного сбора YouTube и GitHub.",
+  source_manual_check_unavailable:"Сборщик сейчас недоступен.",
   github_oauth_failed:"GitHub не подтвердил подключение. Повтори попытку.",
   invalid_model_scope:"Укажи корректный идентификатор источника, сценария или профиля.",
   codexsale_unconfigured:"Codex Sale не подключён к веб-контейнеру. Проверь серверные переменные.",
@@ -726,6 +729,39 @@ function render(){
           }catch(error){button.lastElementChild.textContent=friendly(error);button.disabled=false;}
         });
         actions.append(button);
+        if(source.enabled&&["youtube","github"].includes(source.kind)){
+          const check=action("Проверить сбор","refresh",async()=>{
+            if(!window.confirm(
+              "Выполнить одну проверку публичного источника? AI и рассылка не запускаются. "+
+              "Проверка расходует обычную квоту YouTube RSS или GitHub API."
+            ))return;
+            check.disabled=true;
+            check.lastElementChild.textContent="Проверяем…";
+            try{
+              const result=await api("/api/source/check",{
+                method:"POST",body:JSON.stringify({id:source.id})
+              });
+              const entry=result.results?.[0]||{};
+              let explanation="";
+              if(result.attempted){
+                explanation="Статус: "+(entry.status||"неизвестно")+
+                  ". Получено: "+(entry.seen||0)+", новых: "+(entry.inserted||0)+".";
+                if(entry.error)explanation+=" Ошибка: "+entry.error;
+              }else{
+                explanation="Сбор не запущен: "+(entry.status||"ограничение частоты")+
+                  ". Повтор с обходом ограничений не выполнялся.";
+              }
+              state.sourceCheckNotice={id:source.id,message:explanation};
+              state.data=await api("/api/overview");
+              render();
+            }catch(error){
+              state.sourceCheckNotice={id:source.id,message:friendly(error)};
+              state.data=await api("/api/overview");
+              render();
+            }
+          },"secondary-button");
+          actions.append(check);
+        }
         if(source.kind==="youtube"&&source.id.startsWith("youtube_user_")){
           const remove=action("Удалить канал","close",async()=>{
             if(!window.confirm("Удалить отслеживание канала? Уже сохранённые материалы останутся."))return;
@@ -756,7 +792,13 @@ function render(){
           },"secondary-button source-remove");
           actions.append(removePublic);
         }
-        tile.append(actions);root.append(tile);
+        tile.append(actions);
+        if(state.sourceCheckNotice?.id===source.id){
+          const notice=el("p","source-check-result",state.sourceCheckNotice.message);
+          notice.setAttribute("role","status");
+          tile.append(notice);
+        }
+        root.append(tile);
       }
     }
   }else if(section==="media"){
