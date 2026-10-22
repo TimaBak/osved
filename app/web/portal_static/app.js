@@ -746,7 +746,7 @@ function render(){
     const provider=el("section","connection-guide");
     provider.append(el("strong","","AI-провайдер и выбор моделей"));
     provider.append(el("p","",
-      "Основной выбранный провайдер — Codex Sale. Его клиент и меню моделей находятся в незавершённом PR #1: в опубликованной версии интеграция ещё не включена. Сейчас YouTube-пайплайн технически зависит от OpenRouter и Monid. Не вводи ключи сюда — для них нужен защищённый серверный канал."));
+      "Основной целевой провайдер — Codex Sale. Ниже показаны сохранённые назначения моделей, но запуск внешней генерации через Codex Sale ещё не подтверждён. Существующий YouTube-пайплайн зависит от OpenRouter и Monid. Ключи API задаются только на сервере."));
     panel.append(provider);
     if(state.aiModels){
       const models=el("section","connection-guide");
