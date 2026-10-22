@@ -430,7 +430,7 @@ function render(){
             const result=await api("/api/source",{
               method:"POST",body:JSON.stringify({id:source.id,enabled:!source.enabled})
             });
-            source.enabled=result.enabled;await refresh();
+            source.enabled=result.enabled;render();
           }catch(error){button.lastElementChild.textContent=friendly(error);button.disabled=false;}
         });
         actions.append(button);
