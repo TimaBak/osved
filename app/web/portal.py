@@ -866,6 +866,22 @@ async def youtube_subscriptions_preview(request: web.Request) -> web.Response:
         return error("invalid_youtube_page")
     except YoutubeSubscriptionsError:
         return error("youtube_subscriptions_fetch_failed", 502)
+    # Annotate subscribed channels with their current OSVED source status.
+    # No tokens or unrelated source metadata are returned to the browser.
+    with state.repository.connection() as db:
+        active = {
+            row["channel_id"]: row["source_id"]
+            for row in db.execute(
+                "SELECT channel_id,source_id FROM youtube_channels "
+                "WHERE removed_at IS NULL"
+            )
+        }
+    for channel in result["channels"]:
+        source_id = active.get(channel["channel_id"])
+        channel["tracked"] = bool(source_id)
+        channel["removable_source_id"] = (
+            source_id if source_id and source_id.startswith("youtube_user_") else None
+        )
     return web.json_response(result)
 
 

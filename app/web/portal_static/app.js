@@ -975,23 +975,50 @@ function render(){
                 details.append(el("strong","",channel.title));
                 const link=external(channel.url,"Открыть на YouTube");
                 if(link)details.append(link);
+                let sourceId=channel.removable_source_id||"";
+                let tracked=Boolean(channel.tracked);
                 const add=action("Добавить в источники","plus",async()=>{
+                  if(tracked&&!sourceId)return;
+                  if(sourceId&&!window.confirm(
+                    "Убрать этот канал из ОСВЕД? Подписка на YouTube и история материалов сохранятся."
+                  ))return;
+                  const removing=Boolean(sourceId);
                   add.disabled=true;
-                  add.querySelector("span").textContent="Добавляем…";
+                  add.querySelector("span").textContent=removing?"Убираем…":"Добавляем…";
                   try{
-                    const result=await api("/api/accounts/youtube/channels/import",{
-                      method:"POST",body:JSON.stringify({channel_id:channel.channel_id})
-                    });
-                    add.querySelector("span").textContent=result.existing?"Уже добавлен":"Добавлено ✓";
-                    add.classList.add("youtube-import-added");
-                    // Keep the source registry current for the next section navigation.
+                    if(removing){
+                      await api("/api/youtube/channels/remove",{
+                        method:"POST",body:JSON.stringify({id:sourceId})
+                      });
+                      sourceId="";
+                      tracked=false;
+                    }else{
+                      const result=await api("/api/accounts/youtube/channels/import",{
+                        method:"POST",body:JSON.stringify({channel_id:channel.channel_id})
+                      });
+                      sourceId=result.source_id?.startsWith("youtube_user_")
+                        ?result.source_id:"";
+                      tracked=true;
+                    }
+                    updateAction();
                     try{state.data=await api("/api/overview");}catch(_){}
                   }catch(error){
-                    add.disabled=false;
-                    add.querySelector("span").textContent="Добавить в источники";
+                    updateAction();
                     alert(friendly(error));
                   }
                 },"secondary-button");
+                function updateAction(){
+                  const text=sourceId?"Убрать из ОСВЕД":tracked
+                    ?"Системный источник":"Добавить в источники";
+                  add.querySelector("span").textContent=text;
+                  add.querySelector("use")?.setAttribute(
+                    "href",sourceId?"#i-close":"#i-plus"
+                  );
+                  add.classList.toggle("youtube-import-added",tracked);
+                  add.disabled=tracked&&!sourceId;
+                  card.classList.toggle("youtube-channel-tracked",tracked);
+                }
+                updateAction();
                 card.append(details,add);
                 list.append(card);
                 count++;

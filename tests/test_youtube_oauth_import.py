@@ -70,11 +70,44 @@ def test_authenticated_subscription_import_without_public_feed(tmp_path):
                     path, headers=headers, json={"channel_id": CHANNEL},
                 )
                 assert (await repeated.json())["existing"] is True
+            mock_channels = {
+                "channels": [{
+                    "channel_id": CHANNEL, "title": "Достоверное имя канала",
+                    "url": "https://www.youtube.com/channel/" + CHANNEL,
+                }],
+                "next_page_token": None,
+            }
+            preview_url = "/api/accounts/youtube/subscriptions"
+            with patch(
+                "app.web.youtube_subscriptions.list_subscriptions",
+                return_value=mock_channels,
+            ):
+                preview = await client.get(
+                    preview_url, headers={"Cookie": headers["Cookie"]},
+                )
+                assert preview.status == 200
+                subscribed = (await preview.json())["channels"][0]
+                assert subscribed["tracked"] is True
+                assert subscribed["removable_source_id"] == data["source_id"]
+
+                removed = await client.post(
+                    "/api/youtube/channels/remove",
+                    headers=headers, json={"id": data["source_id"]},
+                )
+                assert removed.status == 200
+                preview = await client.get(
+                    preview_url, headers={"Cookie": headers["Cookie"]},
+                )
+                subscribed = (await preview.json())["channels"][0]
+                assert subscribed["tracked"] is False
+                assert subscribed["removable_source_id"] is None
+                assert subscribed["channel_id"] == CHANNEL
+
             overview = await client.get("/api/overview", headers={
                 "Cookie": headers["Cookie"],
             })
             sources = (await overview.json())["sources"]
-            assert any(source["id"] == data["source_id"] for source in sources)
+            assert not any(source["id"] == data["source_id"] for source in sources)
         finally:
             await client.close()
 
