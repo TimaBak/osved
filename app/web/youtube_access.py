@@ -13,6 +13,7 @@ from app.web.youtube_oauth import (
 )
 from app.web.youtube_subscriptions import YoutubeSubscriptionsAuthError
 
+
 def with_youtube_access[T](
     settings: Settings, repository: Repository, owner_id: int,
     account_id: str, operation: Callable[[str], T],
