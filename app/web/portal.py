@@ -545,12 +545,12 @@ async def add_youtube_source(request: web.Request) -> web.Response:
             ChannelService(state.settings, state.repository).add,
             normalized, owner_id,
         )
-    except (KeyError, TypeError, ValueError):
-        return error("invalid_youtube_channel")
     except ChannelError as exc:
         return web.json_response({
             "error": "youtube_channel_unavailable", "detail": str(exc)[:180],
         }, status=422)
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_youtube_channel")
     return web.json_response({
         "ok": True, "source_id": result["source_id"],
         "title": result["title"], "existing": bool(result["existing"]),
