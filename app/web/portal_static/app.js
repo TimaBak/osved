@@ -836,6 +836,15 @@ function render(){
         :"Требуется настройка OAuth-приложения на сервере."));
       if(key==="github"){
         const connect=action("Войти через GitHub","settings",async()=>{
+          if(!item?.login_available){
+            const missing=(item?.missing||[]).map(code=>({
+              oauth_app:"OAuth-приложение GitHub (Client ID и Client Secret)",
+              token_vault:"ключ шифрования OAUTH_TOKEN_ENCRYPTION_KEY",
+              callback_and_consent:"callback для авторизации"
+            })[code]||code);
+            alert("GitHub OAuth пока нельзя запустить. На сервере требуется: "+(missing.join(", ")||"проверка настройки")+". Пароли и ключи в чат не отправляй.");
+            return;
+          }
           connect.disabled=true;
           try{
             const response=await api("/api/accounts/github/start",{
@@ -844,15 +853,13 @@ function render(){
             if(response.authorization_url)window.location.assign(response.authorization_url);
           }catch(error){connect.disabled=false;alert(friendly(error));}
         },"secondary-button");
-        if(!item?.login_available){
-          connect.disabled=true;
-          connect.title="Нужно настроить OAuth GitHub и ключ шифрования на сервере";
-        }
+        connect.title=item?.login_available?"Подключить аккаунт через GitHub":"Проверить настройку GitHub OAuth";
         row.append(connect);
       }else{
         const pending=el("button","","Войти через YouTube");
-        pending.type="button";pending.disabled=true;
-        pending.title="Подключение Google OAuth ещё разрабатывается";
+        pending.type="button";
+        pending.title="Показать статус подключения YouTube";
+        pending.addEventListener("click",()=>alert("YouTube OAuth пока разрабатывается. Кнопка входа будет активирована после реализации безопасного callback Google и проверки разрешений."));
         row.append(pending);
       }
       accounts.append(row);
