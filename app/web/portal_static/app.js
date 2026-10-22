@@ -14,7 +14,7 @@ const el=(tag,cls,value)=>{
   if(value!==undefined)node.textContent=String(value);
   return node;
 };
-const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,sourceGroup:"all",sourceTopic:"all"};
+const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,aiCatalog:null,sourceGroup:"all",sourceTopic:"all"};
 const tg=window.Telegram&&window.Telegram.WebApp;
 const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
@@ -760,7 +760,46 @@ function render(){
         row.append(pill(selection.verified?"ПРОВЕРЕНО":"НЕ ПРОВЕРЕНО",selection.verified?"tag":"tag off"));
         models.append(row);
       }
-      models.append(el("p","","Изменение моделей появится после проверки доступного каталога и серверных лимитов. Ключи API сюда не вводятся."));
+      const btn=el("button","","Получить доступные модели");
+      btn.type="button";
+      btn.addEventListener("click",async()=>{
+        btn.disabled=true;
+        try{
+          const catalogue=await api("/api/ai/catalog");
+          state.aiCatalog=catalogue.models||[];
+          render();
+        }catch(error){btn.disabled=false;alert(friendly(error));}
+      });
+      models.append(btn);
+      if(state.aiCatalog){
+        const note=el("p","","Модели получены от провайдера. Это не проверка возможности генерации или цены.");
+        models.append(note);
+        for(const [task,selection] of Object.entries(state.aiModels.selections||{})){
+          const row=el("div","capability-row");
+          row.append(el("strong","",taskNames[task]||task));
+          const picker=el("select","");
+          for(const value of state.aiCatalog){
+            const option=el("option","",value);
+            option.value=value;
+            picker.append(option);
+          }
+          if(state.aiCatalog.includes(selection.model))picker.value=selection.model;
+          else picker.selectedIndex=-1;
+          const save=el("button","","Сохранить");
+          save.disabled=picker.selectedIndex<0;
+          save.addEventListener("click",async()=>{
+            save.disabled=true;
+            try{
+              await api("/api/ai/models",{method:"POST",body:JSON.stringify({task,model:picker.value})});
+              state.aiModels=await api("/api/ai/models");
+              render();
+            }catch(error){save.disabled=false;alert(friendly(error));}
+          });
+          picker.addEventListener("change",()=>{save.disabled=!picker.value;});
+          row.append(picker,save);models.append(row);
+        }
+      }
+      models.append(el("p","","Сохранение выбора не включает платные запросы. Ключи API указываются только на сервере."));
       panel.append(models);
     }
     const accounts=el("section","panel account-status");
