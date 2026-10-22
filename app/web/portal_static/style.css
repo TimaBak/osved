@@ -302,3 +302,8 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
   .youtube-import-list{grid-template-columns:1fr}
   .youtube-channel-card button{width:100%;justify-content:center}
 }
+
+/* Mark channels currently followed by OSVED, not merely by YouTube. */
+.youtube-channel-tracked{border-color:var(--border-strong)}
+.youtube-channel-tracked .youtube-channel-details strong{color:var(--text)}
+.youtube-channel-tracked button.youtube-import-added{color:var(--warning)}
