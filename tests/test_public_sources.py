@@ -63,10 +63,17 @@ def test_add_restart_pause_remove_and_restore(tmp_path):
     source = next(src for src in registry.sources if src.id == source_id)
     assert source.locator == "Example/Repository"
     assert source.kind.value == "github"
-    assert source.topics == []
+    assert source.topics == ["ai_software"]
     assert source.strategy == "releases"
     assert source.admission_mode == "event_candidate"
     assert source.daily_call_cap <= 6
+    from app.collectors.orchestrator import collect_due_sources
+
+    plan = collect_due_sources(
+        settings, repo, source_ids=[source_id], dry_run=True
+    )
+    assert plan["rows"][0]["status"] == "planned"
+    assert plan["rows"][0]["estimated_cost_usd"] == 0
     repo.set_runtime_setting("source_enabled:" + source_id, "false")
     assert repo.get_runtime_setting("source_enabled:" + source_id) == "false"
     remove(repo, settings, source_id)
