@@ -675,6 +675,67 @@ async def remove_public_source(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "id": source_id, "removed": True})
 
 
+async def check_public_source_now(request: web.Request) -> web.Response:
+    """Explicit bounded owner-only poll of ONE zero-price public adapter.
+
+    This is not scheduled or automatic: it uses existing cooldown, lease and
+    deduplication logic, and never triggers AI/editorial delivery.
+    """
+    from app.collectors.orchestrator import collect_due_sources
+    from app.collectors.registry import adapter_id_for, build_adapter_registry
+    from app.config import runtime_source_registry
+
+    state: PortalState = request.app[STATE]
+    try:
+        payload = await request.json()
+        source_id = payload.get("id") if isinstance(payload, dict) else None
+        if not isinstance(source_id, str) or not 1 <= len(source_id) <= 160:
+            return error("invalid_source")
+    except (ValueError, TypeError):
+        return error("invalid_source")
+    visible = await asyncio.to_thread(state.store.sources)
+    selected = next((row for row in visible if row["id"] == source_id), None)
+    if not selected:
+        return error("not_found", 404)
+    if not selected["enabled"]:
+        return error("source_paused", 409)
+    if selected["kind"] not in {"github", "youtube"}:
+        return error("source_manual_check_unsupported", 400)
+
+    registry = runtime_source_registry(state.settings)
+    source = next((row for row in registry.sources if row.id == source_id), None)
+    if source is None or source.options.get("removed") or source.admission_mode == "history":
+        return error("not_found", 404)
+    # A paid/custom adapter may not masquerade as a public GitHub/YouTube poll.
+    adapter_id = adapter_id_for(source, state.settings)
+    if adapter_id != selected["kind"]:
+        return error("source_manual_check_unsupported", 400)
+    adapter = build_adapter_registry(state.settings, state.repository).get(adapter_id)
+    if adapter is None:
+        return error("source_manual_check_unavailable", 503)
+    capabilities = adapter.capabilities()
+    if capabilities.requires_auth or capabilities.estimated_cost_usd != 0:
+        return error("source_manual_check_unsupported", 400)
+    result = await asyncio.to_thread(
+        collect_due_sources, state.settings, state.repository,
+        source_ids=[source_id], limit_per_source=10, force=False, dry_run=False,
+    )
+    checks = [
+        {
+            "status": row["status"],
+            "seen": row.get("seen", 0),
+            "inserted": row.get("inserted", 0),
+            "error": str(row.get("error") or "")[:180],
+        }
+        for row in result["sources"] if row.get("source_id") == source_id
+    ]
+    return web.json_response({
+        "source_id": source_id, "results": checks,
+        "attempted": result["sources_attempted"] == 1,
+        "paid_cost_usd": result["cost_usd"],
+    })
+
+
 async def source_update(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     try:
@@ -1244,6 +1305,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/source", source_update)
+    app.router.add_post("/api/source/check", check_public_source_now)
     app.router.add_post("/api/public-sources/add", add_public_source)
     app.router.add_post("/api/public-sources/remove", remove_public_source)
     app.router.add_post("/api/youtube/channels/add", add_youtube_source)
