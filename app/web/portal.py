@@ -26,6 +26,11 @@ from app.video.channels import ChannelError, ChannelService, change_channel, cha
 from app.video.reports import ReportError
 from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
+from app.web.hidden_items import (
+    hidden_snapshot,
+    initialize as initialize_hidden_items,
+    set_hidden,
+)
 from app.web.login_codes import ensure_login_schema, redeem_login_code
 from app.web.personalization import (
     clear_preferences,
@@ -267,6 +272,7 @@ async def overview(request: web.Request) -> web.Response:
             "sources": state.store.sources(),
             "health": feed_health(state.repository),
             "reading": list_notes(state.repository),
+            "hidden": hidden_snapshot(state.repository),
             "personalization": {"topics": prefs["topics"], "feedback_count": len(prefs["feedback"]),
                                 "algorithm": "heuristic_v1"},
             "locale": "ru-RU",
@@ -507,6 +513,36 @@ async def reader_item(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+async def hide_item(request: web.Request) -> web.Response:
+    """Dismiss or restore one item or signal, without changing preferences."""
+    state: PortalState = request.app[STATE]
+    try:
+        payload = await request.json()
+        kind, item_id, hidden = payload["kind"], payload["id"], payload["hidden"]
+        if (
+            kind not in {"news", "video", "radar"}
+            or type(item_id) is not int or not 0 < item_id < 2**31
+            or type(hidden) is not bool
+        ):
+            return error("invalid_hidden_item")
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_hidden_item")
+
+    def exists() -> bool:
+        if kind == "radar":
+            with state.repository.connection() as db:
+                return db.execute(
+                    "SELECT 1 FROM events WHERE id=? AND status='candidate'",
+                    (item_id,),
+                ).fetchone() is not None
+        return state.store.item(kind, item_id, detail=False) is not None
+
+    if not await asyncio.to_thread(exists):
+        return error("not_found", 404)
+    await asyncio.to_thread(set_hidden, state.repository, kind, item_id, hidden)
+    return web.json_response({"ok": True, "kind": kind, "id": item_id, "hidden": hidden})
+
+
 async def bookmark(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     try:
@@ -687,6 +723,7 @@ async def startup(app: web.Application) -> None:
     await asyncio.to_thread(initialize_sessions, state.repository)
     await asyncio.to_thread(initialize, state.repository)
     await asyncio.to_thread(initialize_personalization, state.repository)
+    await asyncio.to_thread(initialize_hidden_items, state.repository)
     await asyncio.to_thread(initialize_public_sources, state.repository)
 
 
@@ -708,6 +745,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/video/summary", video_summary)
     app.router.add_get("/api/video/jobs/{job_id}", video_job)
     app.router.add_post("/api/bookmark", bookmark)
+    app.router.add_post("/api/hidden", hide_item)
     app.router.add_get("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/source", source_update)
