@@ -46,6 +46,8 @@ const { chromium } = require("playwright");
       });
     });
     let editorialReady = true;
+    let interestPriority = 0;
+    let interestAction = null;
     await page.route("**/api/overview", route => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -65,6 +67,13 @@ const { chromium } = require("playwright");
             kind: "rss", enabled: true },
         ],
         health: { status: "ok", news_24h: 1, last_news_at: null },
+        personalization: {
+          algorithm:"heuristic_v1", feedback_count:interestAction?1:0,
+          topics:[
+            {id:"ai_software",title:"AI и software",priority:interestPriority},
+            {id:"space",title:"Космос",priority:0},
+          ],
+        },
       }),
     }));
     await page.route("**/api/article/news/1", route => route.fulfill({
@@ -90,6 +99,22 @@ const { chromium } = require("playwright");
         sources:[{title:"Первоисточник",url:"https://example.org/"}],
       }}),
     }));
+    await page.route("**/api/personalization/topic", async route=>{
+      const payload=route.request().postDataJSON();
+      interestPriority=payload.priority;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:JSON.stringify({ok:true,topic:payload.topic,priority:interestPriority})});
+    });
+    await page.route("**/api/personalization/feedback", async route=>{
+      const payload=route.request().postDataJSON();
+      interestAction=payload.action;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:JSON.stringify({ok:true,topic:"ai_software",action:payload.action})});
+    });
+    await page.route("**/api/personalization/reset", async route=>{
+      interestPriority=0;interestAction=null;
+      await route.fulfill({status:200,contentType:"application/json",body:'{"ok":true}'});
+    });
     await page.route("**/api/video/summary", route => route.fulfill({
       status: 409,contentType:"application/json",
       body: '{"error":"ai_provider_unconfigured"}',
@@ -112,6 +137,15 @@ const { chromium } = require("playwright");
     await page.reload({waitUntil:"domcontentloaded"});
     await page.locator("#shell").waitFor({state:"visible",timeout:7000});
     assert.equal(await page.locator("#auth").isVisible(),false);
+    await page.locator('[data-section="interests"]').click();
+    await page.getByText("Управление информационным потоком").waitFor({state:"visible"});
+    await page.locator(".topic-tile").first().locator("button").last().click();
+    await page.locator(".topic-tile").first().getByText("+1").waitFor({state:"visible"});
+    assert.equal(interestPriority,1);
+    await page.locator('[data-section="feed"]').click();
+    await page.locator("#content .reaction-details summary").first().click();
+    await page.getByRole("button",{name:"👍 Больше такого"}).first().click();
+    assert.equal(interestAction,"more");
     await page.locator('[data-section="radar"]').click();
     await page.getByText("Предварительный сигнал").waitFor({state:"visible"});
     await page.locator('[data-section="sources"]').click();

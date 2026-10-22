@@ -26,6 +26,17 @@ from app.video.reports import ReportError
 from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
 from app.web.login_codes import ensure_login_schema, redeem_login_code
+from app.web.personalization import (
+    clear_preferences,
+    material_topic,
+    personalize,
+    set_feedback,
+    set_priority,
+    snapshot,
+)
+from app.web.personalization import (
+    initialize as initialize_personalization,
+)
 from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
 from app.web.sessions import (
     SESSION_SECONDS,
@@ -235,22 +246,87 @@ async def overview(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
 
     def read():
-        feed = state.store.all_items()[:30]
+        prefs = snapshot(state.repository)
+        feed = state.store.all_items()[:100]
         signals = radar_rows(state.repository)
         for item in [*feed, *signals]:
             item["language"] = content_language(
                 str(item.get("title") or "") + " " + str(item.get("summary") or "")
             )
+        for item in signals:
+            item["kind"] = "radar"
         return {
-            "feed": feed,
-            "radar": signals,
+            "feed": personalize(feed, prefs)[:30],
+            "radar": personalize(signals, prefs),
             "sources": state.store.sources(),
             "health": feed_health(state.repository),
             "reading": list_notes(state.repository),
+            "personalization": {"topics": prefs["topics"], "feedback_count": len(prefs["feedback"]),
+                                "algorithm": "heuristic_v1"},
             "locale": "ru-RU",
         }
 
     return web.json_response(await asyncio.to_thread(read))
+
+
+async def set_topic_preference(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        payload = await request.json()
+        topic, priority = payload["topic"], payload["priority"]
+        if not isinstance(topic, str) or type(priority) is not int:
+            return error("invalid_topic_priority")
+        await asyncio.to_thread(set_priority, state.repository, topic, priority)
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_topic_priority")
+    return web.json_response({"ok": True, "topic": topic, "priority": priority})
+
+
+async def set_content_feedback(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        payload = await request.json()
+        kind, item_id, action = payload["kind"], payload["id"], payload["action"]
+        if (kind not in {"news", "video", "radar"}
+                or type(item_id) is not int or item_id <= 0
+                or action not in {"more", "less", "not_interested",
+                                  "already_known", "deeper", "follow", "clear"}):
+            return error("invalid_feedback")
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_feedback")
+
+    def item_topic() -> str | None:
+        if kind == "radar":
+            with state.repository.connection() as db:
+                row = db.execute(
+                    """SELECT e.headline AS title,si.original_text AS summary
+                    FROM events e JOIN source_items si
+                    ON si.id=e.primary_source_item_id
+                    WHERE e.id=? AND e.status='candidate'""", (item_id,)
+                ).fetchone()
+            item = dict(row) if row else None
+        else:
+            item = state.store.item(kind, item_id, detail=False)
+        return material_topic(item) if item else None
+
+    topic = await asyncio.to_thread(item_topic)
+    if topic is None:
+        return error("not_found", 404)
+    await asyncio.to_thread(set_feedback, state.repository, kind, item_id, topic, action)
+    return web.json_response({"ok": True, "kind": kind, "id": item_id,
+                              "topic": topic, "action": action})
+
+
+async def reset_personalization(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict) or payload.get("confirm") is not True:
+            return error("confirmation_required")
+    except (ValueError, TypeError):
+        return error("confirmation_required")
+    await asyncio.to_thread(clear_preferences, state.repository)
+    return web.json_response({"ok": True})
 
 
 async def article_detail(request: web.Request) -> web.Response:
@@ -489,6 +565,7 @@ async def startup(app: web.Application) -> None:
     await asyncio.to_thread(ensure_login_schema, state.repository)
     await asyncio.to_thread(initialize_sessions, state.repository)
     await asyncio.to_thread(initialize, state.repository)
+    await asyncio.to_thread(initialize_personalization, state.repository)
 
 
 def create_portal(settings: Settings, repository: Repository) -> web.Application:
@@ -500,6 +577,9 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/code-login", code_login)
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
+    app.router.add_post("/api/personalization/topic", set_topic_preference)
+    app.router.add_post("/api/personalization/feedback", set_content_feedback)
+    app.router.add_post("/api/personalization/reset", reset_personalization)
     app.router.add_get("/api/article/{kind}/{item_id}", article_detail)
     app.router.add_get("/api/radar/{item_id}", signal_detail)
     app.router.add_post("/api/video/summary", video_summary)
