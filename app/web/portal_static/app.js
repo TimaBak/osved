@@ -31,6 +31,8 @@ const labels={
   settings:["Настройки","Статус платформы, оформление и доступные функции."],
 };
 const errors={
+  github_oauth_unconfigured:"GitHub OAuth ещё не настроен на сервере.",
+  github_oauth_failed:"GitHub не подтвердил подключение. Повтори попытку.",
   invalid_model_scope:"Укажи корректный идентификатор источника, сценария или профиля.",
   codexsale_unconfigured:"Codex Sale не подключён к веб-контейнеру. Проверь серверные переменные.",
   codexsale_catalog_unavailable:"Не удалось получить каталог моделей Codex Sale.",
@@ -832,6 +834,27 @@ function render(){
       row.append(el("span","",item?.configuration_present
         ?"OAuth-приложение настроено. Авторизация пока недоступна до завершения защищённого callback."
         :"Требуется настройка OAuth-приложения на сервере."));
+      if(key==="github"){
+        const connect=action("Войти через GitHub","settings",async()=>{
+          connect.disabled=true;
+          try{
+            const response=await api("/api/accounts/github/start",{
+              method:"POST",body:JSON.stringify({})
+            });
+            if(response.authorization_url)window.location.assign(response.authorization_url);
+          }catch(error){connect.disabled=false;alert(friendly(error));}
+        },"secondary-button");
+        if(!item?.login_available){
+          connect.disabled=true;
+          connect.title="Нужно настроить OAuth GitHub и ключ шифрования на сервере";
+        }
+        row.append(connect);
+      }else{
+        const pending=el("button","","Войти через YouTube");
+        pending.type="button";pending.disabled=true;
+        pending.title="Подключение Google OAuth ещё разрабатывается";
+        row.append(pending);
+      }
       accounts.append(row);
     }
     accounts.append(el("p","","X, Reddit и импорт личных Telegram-подписок — последующие этапы. Пароли и cookies ОСВЕД не запрашивает."));
