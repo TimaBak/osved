@@ -250,15 +250,21 @@ const { chromium } = require("playwright");
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
     await page.locator("#content .tile .tile-actions").first()
-      .getByRole("button",{name:"✕ Скрыть"}).click();
+      .getByRole("button",{name:"Скрыть",exact:true}).click();
     assert.equal(hiddenNews,true);
     await page.locator('[data-section="hidden"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
     await page.locator("#content .tile .tile-actions").first()
-      .getByRole("button",{name:"↩ Вернуть в ленту"}).click();
+      .getByRole("button",{name:"Вернуть в ленту",exact:true}).click();
     assert.equal(hiddenNews,false);
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
+    // Titles are clickable buttons and open the internal reader, not external links.
+    const headline=page.locator("#content .tile-title-button").first();
+    assert.equal(await headline.isVisible(),true);
+    await headline.click();
+    await page.getByText("Полный проверенный материал",{exact:false}).waitFor({state:"visible"});
+    await page.locator("#dialog-close").click();
     await page.locator("#theme-toggle").click();
     assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
     await page.locator("#theme-toggle").click();
