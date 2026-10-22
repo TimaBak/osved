@@ -181,10 +181,17 @@ function card(item,kind){
   if(item.language==="original")head.append(pill("ИНОСТРАННЫЙ ОРИГИНАЛ","tag off"));
   const note=readingState(type,item.id);
   if(note.is_read)head.append(pill("ПРОЧИТАНО","tag"));
-  node.append(head,el("h2","",item.title||"Без заголовка"));
-  if(item.summary||item.source||item.source_name){
-    node.append(el("p","",item.summary||sourceName(item)));
-  }
+  const title=el("h2","tile-title");
+  const titleButton=el("button","tile-title-button",item.title||"Без заголовка");
+  titleButton.type="button";
+  titleButton.setAttribute("aria-label","Открыть материал: "+(item.title||"Без заголовка"));
+  titleButton.addEventListener("click",()=>openArticle(item,type));
+  title.append(titleButton);
+  node.append(head,title);
+  const preview=String(item.summary||"").trim();
+  if(preview)node.append(el("p","tile-summary",preview));
+  else node.append(el("p","tile-summary tile-summary-empty",
+    "Краткое описание пока не подготовлено."));
   node.append(el("span","tile-meta",sourceName(item)));
   if(item.recommendation){
     const detail=el("p","recommendation-reason","Почему показано: "+item.recommendation.reason);
@@ -208,7 +215,7 @@ function card(item,kind){
     actions.append(save);
   }
   const hidden=isHidden(type,item.id);
-  actions.append(action(hidden?"↩ Вернуть в ленту":"✕ Скрыть","close",async()=>{
+  actions.append(action(hidden?"Вернуть в ленту":"Скрыть",hidden?"refresh":"close",async()=>{
     const button=actions.lastElementChild;
     button.disabled=true;
     try{
