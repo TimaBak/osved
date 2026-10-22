@@ -805,7 +805,10 @@ async def youtube_login_callback(request: web.Request) -> web.Response:
     from app.web.oauth_state import consume_oauth_state
     from app.web.oauth_vault import save_tokens
     from app.web.youtube_oauth import (
-        YOUTUBE_SCOPE, YoutubeOAuthError, exchange_code, own_channel_id,
+        YOUTUBE_SCOPE,
+        YoutubeOAuthError,
+        exchange_code,
+        own_channel_id,
     )
 
     state: PortalState = request.app[STATE]
