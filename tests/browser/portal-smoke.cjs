@@ -49,6 +49,7 @@ const { chromium } = require("playwright");
     let interestPriority = 0;
     let interestAction = null;
     let addedChannel = false;
+    let addedPublicSource = false;
     await page.route("**/api/overview", route => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -75,6 +76,11 @@ const { chromium } = require("playwright");
           id:"youtube_user_sample",name:"YouTube — Демонстрационный канал",
           kind:"youtube",category:"Видео",platform:"YouTube",topics:[],
           enabled:true,status:"ready",
+        }] : []).concat(addedPublicSource ? [{
+          id:"user_github_sample",name:"GitHub — example/sample",
+          kind:"github",category:"Разработка",platform:"GitHub",
+          url:"https://github.com/example/sample",topics:["ai_software"],
+          enabled:true,status:"ready",last_success_at:null,
         }] : []),
         health: { status: "ok", news_24h: 1, last_news_at: null },
         personalization: {
@@ -137,6 +143,20 @@ const { chromium } = require("playwright");
       status: 409,contentType:"application/json",
       body: '{"error":"ai_provider_unconfigured"}',
     }));
+    await page.route("**/api/public-sources/add", async route=>{
+      const body=route.request().postDataJSON();
+      assert.equal(body.kind,"github");
+      assert.equal(body.locator,"example/sample");
+      addedPublicSource=true;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:JSON.stringify({ok:true,id:"user_github_sample",
+          name:"GitHub — example/sample",existing:false})});
+    });
+    await page.route("**/api/public-sources/remove", async route=>{
+      addedPublicSource=false;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:'{"ok":true,"removed":true}'});
+    });
     await page.route("**/api/youtube/channels/add", async route=>{
       addedChannel=true;
       await route.fulfill({status:200,contentType:"application/json",
@@ -200,6 +220,12 @@ const { chromium } = require("playwright");
     await page.getByText("Демонстрационный канал",{exact:false}).first()
       .waitFor({state:"visible"});
     assert.equal(addedChannel,true);
+    await page.locator("#public-source-kind").selectOption("github");
+    await page.locator("#public-source-locator").fill("example/sample");
+    await page.locator("#public-source-topic").selectOption("ai_software");
+    await page.locator("#public-source-add-form button[type=submit]").click();
+    await page.getByText("GitHub — example/sample",{exact:true}).waitFor({state:"visible"});
+    assert.equal(addedPublicSource,true);
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
     await page.locator("#theme-toggle").click();
