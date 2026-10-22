@@ -49,3 +49,38 @@ def list_subscriptions(token: str, *, page_token: str = "") -> dict:
         "channels": channels,
         "next_page_token": next_token if isinstance(next_token, str) else None,
     }
+
+
+def verify_owner_subscription(token: str, channel_id: str) -> str | None:
+    """Confirm membership and title via owner's authorized subscriptions API.
+
+    Public RSS availability is not required for this official OAuth import.
+    """
+    from app.video.channels import CHANNEL_ID
+
+    if not isinstance(channel_id, str) or not CHANNEL_ID.fullmatch(channel_id):
+        raise ValueError("Invalid YouTube channel ID")
+    query = urlencode({
+        "part": "snippet", "mine": "true", "forChannelId": channel_id,
+        "maxResults": "5",
+    })
+    request = Request(
+        "https://www.googleapis.com/youtube/v3/subscriptions?" + query,
+        headers={"Authorization": "Bearer " + token, "Accept": "application/json",
+                 "User-Agent": "OSVED"},
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            payload = json.load(response)
+    except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+        raise YoutubeSubscriptionsError("youtube_subscription_verify_failed") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        raise YoutubeSubscriptionsError("youtube_subscription_invalid_payload")
+    for row in payload["items"][:5]:
+        snippet = row.get("snippet") if isinstance(row, dict) else None
+        resource = snippet.get("resourceId") if isinstance(snippet, dict) else None
+        if isinstance(resource, dict) and resource.get("channelId") == channel_id:
+            title = snippet.get("title")
+            if isinstance(title, str) and title.strip():
+                return " ".join(title.split())[:180]
+    return None

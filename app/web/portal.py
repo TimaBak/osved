@@ -778,6 +778,62 @@ async def github_subscriptions_preview(request: web.Request) -> web.Response:
     })
 
 
+async def youtube_import_subscription(request: web.Request) -> web.Response:
+    """Import only a channel the OAuth owner is actually subscribed to.
+
+    Official subscriptions.list verifies membership and title; public Atom
+    availability is deliberately not required for OAuth-sourced metadata.
+    """
+    from app.telegram_bot.bot import configured_owner_id
+    from app.video.channels import CHANNEL_ID
+    from app.web.oauth_vault import connected_accounts, read_tokens
+    from app.web.youtube_subscriptions import (
+        YoutubeSubscriptionsError,
+        verify_owner_subscription,
+    )
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    key = state.settings.oauth_token_encryption_key
+    if not owner_id or key is None:
+        return error("youtube_not_connected", 409)
+    try:
+        data = await request.json()
+        channel = data.get("channel_id") if isinstance(data, dict) else None
+        if not isinstance(channel, str) or not CHANNEL_ID.fullmatch(channel):
+            return error("invalid_youtube_channel")
+        accounts = await asyncio.to_thread(
+            connected_accounts, state.repository, provider="youtube", owner_id=owner_id,
+        )
+        if len(accounts) != 1:
+            return error("youtube_account_selection_required", 409)
+        tokens = await asyncio.to_thread(
+            read_tokens, state.repository, encryption_key=key.get_secret_value(),
+            provider="youtube", owner_id=owner_id, account_id=accounts[0],
+        )
+        if not tokens:
+            return error("youtube_not_connected", 409)
+        title = await asyncio.to_thread(verify_owner_subscription, tokens[0], channel)
+        if not title:
+            return error("youtube_not_in_subscriptions", 409)
+        result = await asyncio.to_thread(
+            ChannelService(state.settings, state.repository).add_verified,
+            channel, title, owner_id,
+        )
+    except (ValueError, TypeError, KeyError):
+        return error("invalid_youtube_channel")
+    except YoutubeSubscriptionsError:
+        return error("youtube_subscription_verify_failed", 502)
+    except ChannelError as exc:
+        return web.json_response({
+            "error": "youtube_channel_unavailable", "detail": str(exc)[:180],
+        }, status=422)
+    return web.json_response({
+        "ok": True, "source_id": result["source_id"],
+        "title": result["title"], "existing": bool(result["existing"]),
+    })
+
+
 async def youtube_subscriptions_preview(request: web.Request) -> web.Response:
     from app.telegram_bot.bot import configured_owner_id
     from app.web.oauth_vault import connected_accounts, read_tokens
@@ -1149,6 +1205,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/accounts/github/subscriptions", github_subscriptions_preview)
     app.router.add_post("/api/accounts/github/disconnect", github_disconnect)
     app.router.add_get("/api/accounts/youtube/subscriptions", youtube_subscriptions_preview)
+    app.router.add_post("/api/accounts/youtube/channels/import", youtube_import_subscription)
     app.router.add_post("/api/accounts/youtube/start", youtube_login_start)
     app.router.add_get("/api/accounts/youtube/callback", youtube_login_callback)
     app.router.add_post("/api/accounts/github/start", github_login_start)
