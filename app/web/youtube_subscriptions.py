@@ -36,7 +36,8 @@ def list_subscriptions(token: str, *, page_token: str = "") -> dict:
         snippet = item.get("snippet") if isinstance(item, dict) else None
         resource = snippet.get("resourceId") if isinstance(snippet, dict) else None
         channel_id = resource.get("channelId") if isinstance(resource, dict) else None
-        if not isinstance(channel_id, str) or not channel_id.startswith("UC") or len(channel_id) != 24:
+        if (not isinstance(channel_id, str) or not channel_id.startswith("UC")
+                or len(channel_id) != 24):
             continue
         channels.append({
             "channel_id": channel_id,
