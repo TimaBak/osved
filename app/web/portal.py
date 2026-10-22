@@ -706,9 +706,12 @@ async def check_public_source_now(request: web.Request) -> web.Response:
     source = next((row for row in registry.sources if row.id == source_id), None)
     if source is None or source.options.get("removed") or source.admission_mode == "history":
         return error("not_found", 404)
-    # A paid/custom adapter may not masquerade as a public GitHub/YouTube poll.
+    # Allow only the actual free adapters for these source kinds.
+    # YouTube intentionally uses the "youtube_rss" adapter, not "youtube".
+    # Paid or custom adapters may not masquerade as a public poll.
+    safe_adapters = {"github": "github", "youtube": "youtube_rss"}
     adapter_id = adapter_id_for(source, state.settings)
-    if adapter_id != selected["kind"]:
+    if adapter_id != safe_adapters[selected["kind"]]:
         return error("source_manual_check_unsupported", 400)
     adapter = build_adapter_registry(state.settings, state.repository).get(adapter_id)
     if adapter is None:
