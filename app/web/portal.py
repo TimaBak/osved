@@ -26,11 +26,8 @@ from app.video.channels import ChannelError, ChannelService, change_channel, cha
 from app.video.reports import ReportError
 from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
-from app.web.hidden_items import (
-    hidden_snapshot,
-    initialize as initialize_hidden_items,
-    set_hidden,
-)
+from app.web.hidden_items import hidden_snapshot, set_hidden
+from app.web.hidden_items import initialize as initialize_hidden_items
 from app.web.login_codes import ensure_login_schema, redeem_login_code
 from app.web.personalization import (
     clear_preferences,
