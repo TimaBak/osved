@@ -709,9 +709,84 @@ async def source_update(request: web.Request) -> web.Response:
 
 
 
+async def github_login_start(request: web.Request) -> web.Response:
+    """Issue state bound to existing owner session; never silently connect."""
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.github_oauth import authorization_url
+    from app.web.oauth_state import new_oauth_state
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    session_cookie = request.cookies.get(COOKIE, "")
+    if not owner_id or state.session(request) is None:
+        return error("unauthorized", 401)
+    if not (state.settings.oauth_github_client_id
+            and state.settings.oauth_github_client_secret
+            and state.settings.oauth_token_encryption_key):
+        return error("github_oauth_unconfigured", 503)
+    nonce = await asyncio.to_thread(
+        new_oauth_state, state.repository, provider="github",
+        owner_id=owner_id, browser_session=session_cookie,
+    )
+    return web.json_response({
+        "authorization_url": authorization_url(state.settings.oauth_github_client_id, nonce)
+    })
+
+
+async def github_login_callback(request: web.Request) -> web.Response:
+    """Consume one-use state before code exchange; persist encrypted token."""
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.github_oauth import GithubOAuthError, exchange_code, github_identity
+    from app.web.oauth_state import consume_oauth_state
+    from app.web.oauth_vault import save_tokens
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    if not owner_id or state.session(request) is None:
+        return error("unauthorized", 401)
+    token_state = request.query.get("state", "")
+    code = request.query.get("code", "")
+    if not 1 <= len(code) <= 512:
+        return error("invalid_oauth_callback")
+    valid = await asyncio.to_thread(
+        consume_oauth_state, state.repository, provider="github",
+        state=token_state, owner_id=owner_id,
+        browser_session=request.cookies.get(COOKIE, ""),
+    )
+    if not valid:
+        return error("invalid_oauth_state", 403)
+    credentials = state.settings
+    if not (credentials.oauth_github_client_id and credentials.oauth_github_client_secret
+            and credentials.oauth_token_encryption_key):
+        return error("github_oauth_unconfigured", 503)
+    try:
+        token = await asyncio.to_thread(
+            exchange_code, credentials.oauth_github_client_id,
+            credentials.oauth_github_client_secret.get_secret_value(), code,
+        )
+        github_id = await asyncio.to_thread(github_identity, token)
+        await asyncio.to_thread(
+            save_tokens, state.repository,
+            encryption_key=credentials.oauth_token_encryption_key.get_secret_value(),
+            provider="github", owner_id=owner_id, account_id=github_id,
+            access_token=token, scopes="read:user",
+        )
+    except (GithubOAuthError, ValueError):
+        return error("github_oauth_failed", 502)
+    raise web.HTTPFound("/?github_connected=1")
+
+
 async def account_connection_status(request: web.Request) -> web.Response:
     """Never claim OAuth is usable before state, token vault and revoke exist."""
-    settings = request.app[STATE].settings
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.oauth_vault import connected_accounts
+
+    app_state: PortalState = request.app[STATE]
+    settings = app_state.settings
+    owner_id = configured_owner_id(settings, app_state.repository)
+    github_accounts = connected_accounts(
+        app_state.repository, provider="github", owner_id=owner_id
+    ) if owner_id else []
     github_configured = bool(
         settings.oauth_github_client_id and settings.oauth_github_client_secret
     )
@@ -723,11 +798,12 @@ async def account_connection_status(request: web.Request) -> web.Response:
         "accounts": {
             "github": {
                 "configuration_present": github_configured,
-                "connected": False,
-                "login_available": False,
+                "connected": bool(github_accounts),
+                "account_ids": github_accounts,
+                "login_available": github_configured and vault_configured,
                 "missing": (["oauth_app"] if not github_configured else [])
                 + (["token_vault"] if not vault_configured else [])
-                + ["callback_and_consent"],
+                + ([] if github_configured and vault_configured else ["callback_and_consent"]),
             },
             "youtube": {
                 "configuration_present": youtube_configured,
@@ -874,6 +950,9 @@ async def startup(app: web.Application) -> None:
     from app.web.oauth_state import initialize_oauth_states
 
     await asyncio.to_thread(initialize_oauth_states, state.repository)
+    from app.web.oauth_vault import initialize_token_vault
+
+    await asyncio.to_thread(initialize_token_vault, state.repository)
     await asyncio.to_thread(initialize, state.repository)
     await asyncio.to_thread(initialize_personalization, state.repository)
     await asyncio.to_thread(initialize_hidden_items, state.repository)
@@ -891,6 +970,8 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/overview", overview)
     app.router.add_get("/api/capabilities", capabilities)
     app.router.add_get("/api/accounts/status", account_connection_status)
+    app.router.add_post("/api/accounts/github/start", github_login_start)
+    app.router.add_get("/api/accounts/github/callback", github_login_callback)
     app.router.add_get("/api/ai/models", ai_model_settings)
     app.router.add_get("/api/ai/catalog", ai_model_catalog)
     app.router.add_post("/api/ai/models", ai_model_select)
