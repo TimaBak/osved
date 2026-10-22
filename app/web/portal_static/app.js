@@ -51,7 +51,11 @@ const errors={
   youtube_resolution_consent_required:"Чтобы добавить @ник, разреши одно платное распознавание канала.",
   youtube_resolver_unconfigured:"Для @ника пока не настроен Monid. Ссылка /channel/UC… добавляется бесплатно.",
   invalid_youtube_channel:"Это не ссылка на публичный YouTube-канал.",
-  youtube_channel_unavailable:"Не удалось проверить публичную ленту канала.",
+  youtube_channel_unavailable:"Не удалось подтвердить канал. Проверь ссылку или повтори позже.",
+  youtube_not_in_subscriptions:"Канал больше не найден среди подписок этого YouTube-аккаунта.",
+  youtube_subscription_verify_failed:"YouTube не подтвердил подписку. Проверь доступ Google и повтори попытку.",
+  youtube_not_connected:"Сначала подключи YouTube-аккаунт.",
+  youtube_account_selection_required:"Выбери один YouTube-аккаунт для импорта.",
   unavailable:"Субтитры этого ролика недоступны.",
   disabled:"Провайдер для генерации не подключён.",
   processing:"Обработка уже идёт.",
@@ -828,12 +832,21 @@ function render(){
     accounts.append(el("h2","","Мои подключённые аккаунты"));
     accounts.append(el("p","","Личный вход в ОСВЕД через Telegram не даёт доступа к подпискам других сервисов. GitHub и YouTube подключаются через официальные OAuth-страницы. Разрешения можно отозвать в настройках платформ."));
     for(const [service,key] of [["YouTube","youtube"],["GitHub","github"]]){
-      const row=el("div","capability-row");
+      const row=el("div",key==="youtube"?"oauth-provider-card":"capability-row");
       const item=state.accountStatus?.accounts?.[key];
-      row.append(el("strong","",service),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
-      row.append(el("span","",item?.configuration_present
-        ?"OAuth-приложение настроено. Авторизация пока недоступна до завершения защищённого callback."
-        :"Требуется настройка OAuth-приложения на сервере."));
+      if(key==="youtube"){
+        const heading=el("div","oauth-provider-heading");
+        heading.append(el("strong","","YouTube"),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
+        row.append(heading);
+        row.append(el("p","oauth-provider-description",item?.connected
+          ?"Просмотри свои подписки и выбери каналы для информационной ленты ОСВЕД."
+          :"Подключи Google-аккаунт, чтобы импортировать подписки YouTube."));
+      }else{
+        row.append(el("strong","",service),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
+        row.append(el("span","",item?.connected
+          ?"Аккаунт подключён."
+          :item?.configuration_present?"OAuth-приложение настроено.":"Требуется настройка OAuth на сервере."));
+      }
       if(key==="github"){
         const connect=action("Войти через GitHub","settings",async()=>{
           if(!item?.login_available){
@@ -910,9 +923,10 @@ function render(){
           row.append(disconnect);
         }
       }else{
-        const youtube=action(item?.connected?"YouTube подключён":"Войти через YouTube","settings",async()=>{
+        const controls=el("div","oauth-provider-actions");
+        const youtube=action(item?.connected?"Переподключить YouTube":"Войти через YouTube","settings",async()=>{
           if(!item?.login_available){
-            alert("YouTube OAuth ещё не настроен: зарегистрируй Google OAuth Client и добавь OAUTH_GOOGLE_CLIENT_ID и OAUTH_GOOGLE_CLIENT_SECRET в .env Hermes.");
+            alert("YouTube OAuth ещё не настроен: проверь Google Client ID и Secret на Hermes.");
             return;
           }
           youtube.disabled=true;
@@ -923,47 +937,83 @@ function render(){
             if(response.authorization_url)window.location.assign(response.authorization_url);
           }catch(error){youtube.disabled=false;alert(friendly(error));}
         },"secondary-button");
-        row.append(youtube);
         if(item?.connected){
-          const show=action("Мои YouTube-подписки","search",async()=>{
-            show.disabled=true;
-            const section=el("div","connection-guide");
-            const list=el("div","account-subscription-list");
-            const paging=action("Загрузить ещё","plus",()=>fetchPage(),"secondary-button");
-            let cursor="";
-            async function fetchPage(){
-              paging.disabled=true;
-              try{
-                const data=await api("/api/accounts/youtube/subscriptions?"+new URLSearchParams({page:cursor}));
-                for(const channel of data.channels||[]){
-                  const entry=el("div","capability-row");
-                  entry.append(el("strong","",channel.title));
-                  const link=external(channel.url,"Открыть канал");
-                  if(link)entry.append(link);
-                  const add=action("Добавить в источники","plus",async()=>{
-                    add.disabled=true;
-                    try{
-                      await api("/api/youtube/channels/add",{
-                        method:"POST",
-                        body:JSON.stringify({url:channel.url})
-                      });
-                      add.querySelector("span").textContent="Добавлено";
-                    }catch(error){add.disabled=false;alert(friendly(error));}
-                  },"secondary-button");
-                  entry.append(add);list.append(entry);
-                }
-                cursor=data.next_page_token||"";
-                paging.disabled=!cursor;
-                paging.hidden=!cursor;
-                if(!list.children.length)list.append(el("p","","Подписки не найдены."));
-              }catch(error){paging.disabled=false;alert(friendly(error));}
+          const panel=el("section","youtube-import-panel");
+          panel.hidden=true;
+          const info=el("div","youtube-import-summary");
+          const summary=el("h3","","Подписки YouTube");
+          const status=el("p","youtube-import-status","Выбирай каналы, которые ОСВЕД должен отслеживать.");
+          info.append(summary,status);
+          const list=el("div","youtube-import-list");
+          const more=action("Загрузить ещё","plus",()=>loadChannels(),"secondary-button");
+          more.hidden=true;
+          panel.append(info,list,more);
+          const open=action("Показать мои подписки","search",async()=>{
+            if(!panel.hidden){
+              panel.hidden=true;
+              open.querySelector("span").textContent="Показать мои подписки";
+              return;
             }
-            section.append(el("h3","","Мои YouTube-подписки"),list,paging);
-            row.append(section);
-            await fetchPage();
-            show.disabled=false;
-          },"secondary-button");
-          row.append(show);
+            panel.hidden=false;
+            open.querySelector("span").textContent="Скрыть подписки";
+            if(!loaded)await loadChannels();
+          },"primary-button");
+          let loaded=false;
+          let cursor="";
+          let count=0;
+          let busy=false;
+          async function loadChannels(){
+            if(busy)return;
+            busy=true;
+            more.disabled=true;
+            status.textContent="Загружаем подписки из YouTube…";
+            try{
+              const data=await api("/api/accounts/youtube/subscriptions?"+new URLSearchParams({page:cursor}));
+              for(const channel of data.channels||[]){
+                const card=el("div","youtube-channel-card");
+                const details=el("div","youtube-channel-details");
+                details.append(el("strong","",channel.title));
+                const link=external(channel.url,"Открыть на YouTube");
+                if(link)details.append(link);
+                const add=action("Добавить в источники","plus",async()=>{
+                  add.disabled=true;
+                  add.querySelector("span").textContent="Добавляем…";
+                  try{
+                    const result=await api("/api/accounts/youtube/channels/import",{
+                      method:"POST",body:JSON.stringify({channel_id:channel.channel_id})
+                    });
+                    add.querySelector("span").textContent=result.existing?"Уже добавлен":"Добавлено ✓";
+                    add.classList.add("youtube-import-added");
+                    // Keep the source registry current for the next section navigation.
+                    try{state.data=await api("/api/overview");}catch(_){}
+                  }catch(error){
+                    add.disabled=false;
+                    add.querySelector("span").textContent="Добавить в источники";
+                    alert(friendly(error));
+                  }
+                },"secondary-button");
+                card.append(details,add);
+                list.append(card);
+                count++;
+              }
+              cursor=data.next_page_token||"";
+              loaded=true;
+              status.textContent="Загружено каналов: "+count+". Добавляй только нужные — остальные останутся в подписках.";
+              if(!count)status.textContent="YouTube не вернул подписок для этого аккаунта.";
+              more.hidden=!cursor;
+            }catch(error){
+              status.textContent="Не удалось загрузить подписки: "+friendly(error);
+              more.hidden=true;
+            }finally{
+              busy=false;
+              more.disabled=false;
+            }
+          }
+          controls.append(open,youtube);
+          row.append(controls,panel);
+        }else{
+          controls.append(youtube);
+          row.append(controls);
         }
       }
       accounts.append(row);
