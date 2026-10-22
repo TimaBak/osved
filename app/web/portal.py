@@ -734,6 +734,72 @@ async def ai_model_settings(request: web.Request) -> web.Response:
     })
 
 
+
+async def ai_model_catalog(request: web.Request) -> web.Response:
+    """Read account model IDs on explicit owner request (no completion calls)."""
+    from app.llm.codexsale import CodexSaleClient, CodexSaleError
+
+    state: PortalState = request.app[STATE]
+    secret = state.settings.codex_sale_api_key
+    if secret is None:
+        return error("codexsale_unconfigured", 503)
+    try:
+        client = CodexSaleClient(secret.get_secret_value(), timeout=10)
+        models = await asyncio.to_thread(client.models)
+    except CodexSaleError:
+        return error("codexsale_catalog_unavailable", 503)
+    ids = sorted({
+        item["id"] for item in models
+        if isinstance(item.get("id"), str)
+        and 0 < len(item["id"]) <= 128
+    })
+    return web.json_response({
+        "provider": "codexsale", "models": ids,
+        "capabilities_verified": False,
+        "note": "Catalog membership does not verify task capability or billing.",
+    })
+
+
+async def ai_model_select(request: web.Request) -> web.Response:
+    """Persist a chosen text-model ID only after live catalog membership check.
+
+    This endpoint does not make billable completion requests.
+    """
+    from app.llm.codexsale import CodexSaleClient, CodexSaleError
+    from app.llm.routing_policy import set_selection
+
+    state: PortalState = request.app[STATE]
+    secret = state.settings.codex_sale_api_key
+    if secret is None:
+        return error("codexsale_unconfigured", 503)
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict) or set(payload) != {"task", "model"}:
+            return error("invalid_model_selection")
+        task, model = payload["task"], payload["model"]
+        if not isinstance(task, str) or not isinstance(model, str):
+            return error("invalid_model_selection")
+        if len(model) > 128:
+            return error("invalid_model_selection")
+        client = CodexSaleClient(secret.get_secret_value(), timeout=10)
+        catalog = await asyncio.to_thread(client.models)
+        verified_ids = {item["id"] for item in catalog if isinstance(item.get("id"), str)}
+        # /models confirms membership only; execution remains separately disabled.
+        await asyncio.to_thread(
+            set_selection, state.repository,
+            task=task, model=model, verified_models=verified_ids,
+        )
+    except (ValueError, TypeError, KeyError):
+        return error("invalid_model_selection")
+    except CodexSaleError:
+        return error("codexsale_catalog_unavailable", 503)
+    return web.json_response({
+        "ok": True, "task": task, "model": model,
+        "execution_enabled": False,
+        "capability_verified": False,
+    })
+
+
 async def healthz(request: web.Request) -> web.Response:
     return web.json_response({"status": "alive"})
 
@@ -767,6 +833,8 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/overview", overview)
     app.router.add_get("/api/capabilities", capabilities)
     app.router.add_get("/api/ai/models", ai_model_settings)
+    app.router.add_get("/api/ai/catalog", ai_model_catalog)
+    app.router.add_post("/api/ai/models", ai_model_select)
     app.router.add_post("/api/personalization/topic", set_topic_preference)
     app.router.add_post("/api/personalization/feedback", set_content_feedback)
     app.router.add_post("/api/personalization/reset", reset_personalization)

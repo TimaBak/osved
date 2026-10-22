@@ -252,6 +252,7 @@ class Settings(BaseSettings):
     delivery_format: DeliveryFormat = DeliveryFormat.REGULAR
     news_delivery_mode: Literal["scheduled", "on_rating", "hybrid"] = "hybrid"
 
+    codex_sale_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = "google/gemini-2.5-flash-lite"
     openrouter_card_model: str | None = "openai/gpt-5.6-luna"
