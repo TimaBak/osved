@@ -31,6 +31,10 @@ const labels={
   settings:["Настройки","Статус платформы, оформление и доступные функции."],
 };
 const errors={
+  invalid_model_scope:"Укажи корректный идентификатор источника, сценария или профиля.",
+  codexsale_unconfigured:"Codex Sale не подключён к веб-контейнеру. Проверь серверные переменные.",
+  codexsale_catalog_unavailable:"Не удалось получить каталог моделей Codex Sale.",
+  invalid_model_selection:"Модель или назначение не прошли проверку.",
   ai_provider_unconfigured:"AI-провайдер для выжимок не настроен. Нельзя сгенерировать достоверный пересказ без модели.",
   transcription_provider_unconfigured:"Провайдер субтитров не подключён.",
   video_budget_guard_disabled:"Создание новых выжимок закрыто до включения лимита расходов в настройках сервера.",
@@ -774,6 +778,15 @@ function render(){
       if(state.aiCatalog){
         const note=el("p","","Модели получены от провайдера. Это не проверка возможности генерации или цены.");
         models.append(note);
+        const scopeRow=el("div","capability-row");
+        const scopePick=el("select","");
+        for(const [value,title] of [["task","Задача (общая)"],["source","Источник"],["scenario","Сценарий"],["profile","Профиль"]]){
+          const o=el("option","",title);o.value=value;scopePick.append(o);
+        }
+        const scopeId=el("input","");scopeId.placeholder="ID источника / сценария / профиля";
+        scopeId.maxLength=128;scopeId.disabled=true;
+        scopePick.addEventListener("change",()=>{scopeId.disabled=scopePick.value==="task";});
+        scopeRow.append(scopePick,scopeId);models.append(scopeRow);
         for(const [task,selection] of Object.entries(state.aiModels.selections||{})){
           const row=el("div","capability-row");
           row.append(el("strong","",taskNames[task]||task));
@@ -790,7 +803,14 @@ function render(){
           save.addEventListener("click",async()=>{
             save.disabled=true;
             try{
-              await api("/api/ai/models",{method:"POST",body:JSON.stringify({task,model:picker.value})});
+              const scope=scopePick.value==="task"?null:scopePick.value;
+              const id=scope?scopeId.value.trim():null;
+              if(scope&&!/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$/.test(id)){
+                throw {payload:{error:"invalid_model_scope"}};
+              }
+              await api("/api/ai/models",{method:"POST",body:JSON.stringify({
+                task,model:picker.value,...(scope?{scope,scope_id:id}:{})
+              })});
               state.aiModels=await api("/api/ai/models");
               render();
             }catch(error){save.disabled=false;alert(friendly(error));}

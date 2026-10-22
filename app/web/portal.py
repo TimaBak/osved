@@ -715,9 +715,24 @@ async def ai_model_settings(request: web.Request) -> web.Response:
 
     state: PortalState = request.app[STATE]
     tasks = ("news", "research", "search", "video")
+    source_id = request.query.get("source_id")
+    scenario_id = request.query.get("scenario_id")
+    profile_id = request.query.get("profile_id")
+    try:
+        from app.llm.routing_policy import _key
+
+        for scope, ident in (("source", source_id), ("scenario", scenario_id),
+                             ("profile", profile_id)):
+            if ident is not None:
+                _key("news", scope, ident)
+    except ValueError:
+        return error("invalid_model_scope")
     selections = {
         task: {
-            "provider": (route := resolve_selection(state.repository, task=task)).provider,
+            "provider": (route := resolve_selection(
+                state.repository, task=task, source_id=source_id,
+                scenario_id=scenario_id, profile_id=profile_id,
+            )).provider,
             "model": route.model,
             "origin": route.origin,
             "verified": route.verified,
@@ -730,6 +745,7 @@ async def ai_model_settings(request: web.Request) -> web.Response:
         "settings_scope": "shared_runtime_settings",
         "openrouter_fallback_opt_in": fallback_permitted(state.repository),
         "model_execution_enabled": False,
+        "scopes": {"source": source_id, "scenario": scenario_id, "profile": profile_id},
         "selections": selections,
     })
 
@@ -774,9 +790,12 @@ async def ai_model_select(request: web.Request) -> web.Response:
         return error("codexsale_unconfigured", 503)
     try:
         payload = await request.json()
-        if not isinstance(payload, dict) or set(payload) != {"task", "model"}:
+        if not isinstance(payload, dict) or not {"task", "model"} <= set(payload):
+            return error("invalid_model_selection")
+        if set(payload) - {"task", "model", "scope", "scope_id"}:
             return error("invalid_model_selection")
         task, model = payload["task"], payload["model"]
+        scope, scope_id = payload.get("scope"), payload.get("scope_id")
         if not isinstance(task, str) or not isinstance(model, str):
             return error("invalid_model_selection")
         if len(model) > 128:
@@ -787,7 +806,8 @@ async def ai_model_select(request: web.Request) -> web.Response:
         # /models confirms membership only; execution remains separately disabled.
         await asyncio.to_thread(
             set_selection, state.repository,
-            task=task, model=model, verified_models=verified_ids,
+            task=task, model=model, scope=scope, scope_id=scope_id,
+            verified_models=verified_ids,
         )
     except (ValueError, TypeError, KeyError):
         return error("invalid_model_selection")
@@ -795,6 +815,7 @@ async def ai_model_select(request: web.Request) -> web.Response:
         return error("codexsale_catalog_unavailable", 503)
     return web.json_response({
         "ok": True, "task": task, "model": model,
+        "scope": scope, "scope_id": scope_id,
         "execution_enabled": False,
         "capability_verified": False,
     })

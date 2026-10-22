@@ -45,6 +45,16 @@ def test_model_catalog_owner_session_and_csrf(tmp_path):
                 )
                 assert valid.status == 200
                 assert repo.get_runtime_setting("ai.routing.task.news") == "test-model"
+                scoped = await client.post(
+                    "/api/ai/models",
+                    headers={**headers, "X-CSRF-Token": (await auth.json())["csrf"]},
+                    json={"task": "news", "model": "test-model",
+                          "scope": "source", "scope_id": "hackernews"},
+                )
+                assert scoped.status == 200
+                assert repo.get_runtime_setting(
+                    "ai.routing.source.hackernews.news"
+                ) == "test-model"
                 rejected = await client.post(
                     "/api/ai/models",
                     headers={**headers, "X-CSRF-Token": (await auth.json())["csrf"]},
