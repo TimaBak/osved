@@ -12,7 +12,9 @@ class YoutubeSubscriptionsError(RuntimeError):
 
 
 def list_subscriptions(token: str, *, page_token: str = "") -> dict:
-    if not isinstance(page_token, str) or len(page_token) > 256 or not page_token.isascii() or not all(ch.isalnum() or ch in "-_" for ch in page_token):
+    if (not isinstance(page_token, str) or len(page_token) > 256
+            or not page_token.isascii()
+            or not all(ch.isalnum() or ch in "-_" for ch in page_token)):
         raise ValueError("Invalid page token")
     query = {"part": "snippet", "mine": "true", "maxResults": "50"}
     if page_token:
@@ -42,4 +44,7 @@ def list_subscriptions(token: str, *, page_token: str = "") -> dict:
             "url": "https://www.youtube.com/channel/" + channel_id,
         })
     next_token = payload.get("nextPageToken")
-    return {"channels": channels, "next_page_token": next_token if isinstance(next_token, str) else None}
+    return {
+        "channels": channels,
+        "next_page_token": next_token if isinstance(next_token, str) else None,
+    }
