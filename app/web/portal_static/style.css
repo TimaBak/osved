@@ -342,3 +342,10 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
   border-top:1px solid var(--border);padding-top:12px;
   color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .source-collection-facts .source-collection-error{color:var(--warning)}
+
+/* Explicit one-shot public collector check, shown inside the selected source. */
+.source-check-result{display:block!important;overflow-wrap:anywhere;
+  -webkit-line-clamp:unset!important;max-height:none!important;
+  background:var(--primary-soft);border:1px solid var(--border-strong);
+  padding:10px 12px;border-radius:10px;color:var(--text)!important;
+  font-size:12px!important}
