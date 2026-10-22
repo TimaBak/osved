@@ -3,13 +3,19 @@ from __future__ import annotations
 
 import asyncio
 import time
+
 from aiohttp.test_utils import TestClient, TestServer
 from pydantic import SecretStr
 
 from app.web.login_codes import issue_login_code
 from app.web.personalization import (
-    clear_preferences, initialize, material_topic, personalize,
-    set_feedback, set_priority, snapshot,
+    clear_preferences,
+    initialize,
+    material_topic,
+    personalize,
+    set_feedback,
+    set_priority,
+    snapshot,
 )
 from app.web.portal import COOKIE, create_portal
 from tests.test_portal import BOT_TOKEN
@@ -71,8 +77,10 @@ def test_owner_only_feedback_and_manual_topic_priority(tmp_path):
         settings, repo, delivery = fixture(tmp_path)
         settings.telegram_bot_token=SecretStr(BOT_TOKEN)
         with repo.connection() as db:
-            db.execute("UPDATE events SET status='candidate',headline='Открытия в космосе' WHERE id=?",
-                       (delivery["event_id"],))
+            db.execute(
+                "UPDATE events SET status='candidate',headline='Открытия в космосе' WHERE id=?",
+                (delivery["event_id"],),
+            )
         client=TestClient(TestServer(create_portal(settings,repo)))
         await client.start_server()
         try:
