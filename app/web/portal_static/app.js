@@ -188,8 +188,8 @@ function card(item,kind){
   titleButton.addEventListener("click",()=>openArticle(item,type));
   title.append(titleButton);
   node.append(head,title);
-  const preview=String(item.summary||"").trim();
-  if(preview)node.append(el("p","tile-summary",preview));
+  const previewText=String(item.summary||"").trim();
+  if(previewText)node.append(el("p","tile-summary",previewText));
   else node.append(el("p","tile-summary tile-summary-empty",
     "Краткое описание пока не подготовлено."));
   node.append(el("span","tile-meta",sourceName(item)));
