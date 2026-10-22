@@ -566,7 +566,8 @@ function render(){
     header.append(controls);
     const meta=el("p","caption","Подключено к реестру: "+streams.length+
       " · Включено: "+streams.filter(s=>s.enabled).length+
-      " · Ошибки: "+streams.filter(s=>s.status==="error").length);
+      " · Сбор не проверен: "+streams.filter(s=>s.enabled&&s.collection?.status==="never_checked").length+
+      " · Ошибки сбора: "+streams.filter(s=>s.enabled&&s.collection?.status==="error").length);
     header.append(meta);
     const access=el("div","connection-guide");
     access.append(el("strong","","Личные подписки из аккаунтов"));
@@ -678,14 +679,41 @@ function render(){
         tile.append(el("h2","",source.name||source.id));
         const tags=el("div","source-tags");
         tags.append(pill(source.enabled?"ВКЛЮЧЁН":"ПАУЗА",source.enabled?"tag":"tag off"));
-        if(source.status==="error")tags.append(pill("ОШИБКА СБОРА","tag off"));
-        if(source.status==="ready"&&source.enabled)tags.append(pill("НЕТ ЗАРЕГИСТРИРОВАННОЙ ОШИБКИ","tag"));
+        const observation=source.collection||{};
+        const collectionState=observation.status||"never_checked";
+        const collectionLabels={
+          never_checked:"СБОР ЕЩЁ НЕ ПРОВЕРЕН",
+          collected:"СБОР ПОЛУЧИЛ МАТЕРИАЛЫ",
+          no_new_items:"ПРОВЕРЕНО · НЕТ НОВЫХ",
+          empty:"ПРОВЕРЕНО · ПУСТО",
+          running:"ИДЁТ СБОР",
+          error:"ОШИБКА СБОРА",
+          paused:"СБОР НА ПАУЗЕ",
+          history_only:"ИСТОРИЧЕСКИЙ ИСТОЧНИК",
+        };
+        tags.append(pill(collectionLabels[collectionState]||"СТАТУС СБОРА НЕИЗВЕСТЕН",
+          collectionState==="collected"||collectionState==="no_new_items"||
+          collectionState==="empty"?"tag":"tag off"));
         for(const topic of (source.topics||[]).slice(0,7))tags.append(pill(topic,"tag"));
         if(!source.topics?.length)tags.append(pill("ТЕМА НЕ ЗАДАНА","tag off"));
         tile.append(tags);
         tile.append(el("p","",source.platform_description||"Публичный источник"));
-        tile.append(el("span","tile-meta",source.last_success_at?
-          "Последний успешный сбор: "+source.last_success_at:"Успешный сбор пока не подтверждён"));
+        const lastAttempt=observation.last_attempt_at||"ещё не выполнялся";
+        const lastSuccess=source.last_success_at||"не зафиксирован";
+        const stats=el("div","source-collection-facts");
+        stats.append(el("span","","Последняя попытка: "+lastAttempt));
+        stats.append(el("span","","Последний успешный сбор: "+lastSuccess));
+        stats.append(el("span","","Последний запуск: получено "+(observation.last_run_seen||0)+
+          ", добавлено новых "+(observation.last_run_inserted||0)+
+          "; всего сохранено "+(observation.total_items||0)));
+        if(observation.cooldown_until&&collectionState==="error"){
+          stats.append(el("span","","Повторная попытка не раньше: "+observation.cooldown_until));
+        }
+        if(observation.last_error&&collectionState==="error"){
+          stats.append(el("span","source-collection-error",
+            "Причина: "+observation.last_error));
+        }
+        tile.append(stats);
         const actions=el("div","tile-actions");
         const link=external(source.url,"Открыть источник");if(link)actions.append(link);
         const button=action(source.enabled?"Приостановить":"Включить","settings",async()=>{
