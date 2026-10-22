@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlsplit
 
 from app.config import Settings, runtime_source_registry
 from app.db.repository import Repository
+from app.web.store import FOLDERS
 
 KINDS = {"github", "reddit"}
 GITHUB_OWNER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
@@ -73,7 +74,11 @@ def initialize(repository: Repository) -> None:
         )
 
 
-def add(repository: Repository, settings: Settings, kind: str, value: str) -> dict:
+def add(
+    repository: Repository, settings: Settings, kind: str, value: str, topic: str = ""
+) -> dict:
+    if not isinstance(topic, str) or topic == "all" or (topic and topic not in FOLDERS):
+        raise SourceInputError("Неверная категория интересов.")
     locator, title, url = normalize(kind, value)
     identifier = "user_" + kind + "_" + hashlib.sha256(
         locator.casefold().encode("utf-8")
@@ -93,9 +98,9 @@ def add(repository: Repository, settings: Settings, kind: str, value: str) -> di
                 raise SourceInputError("Достигнут лимит 50 публичных источников.")
         db.execute(
             """INSERT INTO owner_public_sources
-               (id,kind,locator,title,added_at,removed_at) VALUES(?,?,?,?,?,NULL)
-               ON CONFLICT(id) DO UPDATE SET removed_at=NULL,title=excluded.title""",
-            (identifier, kind, locator, title, now),
+               (id,kind,locator,title,topic,added_at,removed_at) VALUES(?,?,?,?,?,?,NULL)
+               ON CONFLICT(id) DO UPDATE SET removed_at=NULL,title=excluded.title,topic=excluded.topic""",
+            (identifier, kind, locator, title, topic, now),
         )
         if not existing or existing["removed_at"] is not None:
             db.execute(
