@@ -38,12 +38,10 @@ from app.web.personalization import (
 from app.web.personalization import (
     initialize as initialize_personalization,
 )
-from app.web.public_sources import (
-    SourceInputError,
-    add as add_public_subscription,
-    initialize as initialize_public_sources,
-    remove as remove_public_subscription,
-)
+from app.web.public_sources import SourceInputError
+from app.web.public_sources import add as add_public_subscription
+from app.web.public_sources import initialize as initialize_public_sources
+from app.web.public_sources import remove as remove_public_subscription
 from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
 from app.web.sessions import (
     SESSION_SECONDS,
