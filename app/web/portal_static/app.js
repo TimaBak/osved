@@ -924,6 +924,47 @@ function render(){
           }catch(error){youtube.disabled=false;alert(friendly(error));}
         },"secondary-button");
         row.append(youtube);
+        if(item?.connected){
+          const show=action("Мои YouTube-подписки","search",async()=>{
+            show.disabled=true;
+            const section=el("div","connection-guide");
+            const list=el("div","account-subscription-list");
+            const paging=action("Загрузить ещё","plus",()=>fetchPage(),"secondary-button");
+            let cursor="";
+            async function fetchPage(){
+              paging.disabled=true;
+              try{
+                const data=await api("/api/accounts/youtube/subscriptions?"+new URLSearchParams({page:cursor}));
+                for(const channel of data.channels||[]){
+                  const entry=el("div","capability-row");
+                  entry.append(el("strong","",channel.title));
+                  const link=external(channel.url,"Открыть канал");
+                  if(link)entry.append(link);
+                  const add=action("Добавить в источники","plus",async()=>{
+                    add.disabled=true;
+                    try{
+                      await api("/api/youtube/channels/add",{
+                        method:"POST",
+                        body:JSON.stringify({url:channel.url})
+                      });
+                      add.querySelector("span").textContent="Добавлено";
+                    }catch(error){add.disabled=false;alert(friendly(error));}
+                  },"secondary-button");
+                  entry.append(add);list.append(entry);
+                }
+                cursor=data.next_page_token||"";
+                paging.disabled=!cursor;
+                paging.hidden=!cursor;
+                if(!list.children.length)list.append(el("p","","Подписки не найдены."));
+              }catch(error){paging.disabled=false;alert(friendly(error));}
+            }
+            section.append(el("h3","","Мои YouTube-подписки"),list,paging);
+            row.append(section);
+            await fetchPage();
+            show.disabled=false;
+          },"secondary-button");
+          row.append(show);
+        }
       }
       accounts.append(row);
     }

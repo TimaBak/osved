@@ -778,6 +778,41 @@ async def github_subscriptions_preview(request: web.Request) -> web.Response:
     })
 
 
+async def youtube_subscriptions_preview(request: web.Request) -> web.Response:
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.oauth_vault import connected_accounts, read_tokens
+    from app.web.youtube_subscriptions import (
+        YoutubeSubscriptionsError,
+        list_subscriptions,
+    )
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    key = state.settings.oauth_token_encryption_key
+    if not owner_id or key is None:
+        return error("youtube_not_connected", 409)
+    try:
+        accounts = await asyncio.to_thread(
+            connected_accounts, state.repository, provider="youtube", owner_id=owner_id,
+        )
+        if len(accounts) != 1:
+            return error("youtube_account_selection_required", 409)
+        token_pair = await asyncio.to_thread(
+            read_tokens, state.repository, encryption_key=key.get_secret_value(),
+            provider="youtube", owner_id=owner_id, account_id=accounts[0],
+        )
+        if not token_pair:
+            return error("youtube_not_connected", 409)
+        result = await asyncio.to_thread(
+            list_subscriptions, token_pair[0], page_token=request.query.get("page", ""),
+        )
+    except ValueError:
+        return error("invalid_youtube_page")
+    except YoutubeSubscriptionsError:
+        return error("youtube_subscriptions_fetch_failed", 502)
+    return web.json_response(result)
+
+
 async def youtube_login_start(request: web.Request) -> web.Response:
     from app.telegram_bot.bot import configured_owner_id
     from app.web.oauth_state import new_oauth_state
@@ -1113,6 +1148,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/accounts/status", account_connection_status)
     app.router.add_get("/api/accounts/github/subscriptions", github_subscriptions_preview)
     app.router.add_post("/api/accounts/github/disconnect", github_disconnect)
+    app.router.add_get("/api/accounts/youtube/subscriptions", youtube_subscriptions_preview)
     app.router.add_post("/api/accounts/youtube/start", youtube_login_start)
     app.router.add_get("/api/accounts/youtube/callback", youtube_login_callback)
     app.router.add_post("/api/accounts/github/start", github_login_start)
