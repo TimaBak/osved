@@ -239,7 +239,7 @@ const { chromium } = require("playwright");
     await page.getByText("GitHub — example/sample",{exact:true}).waitFor({state:"visible"});
     assert.equal(addedPublicSource,true);
     await page.locator("#bulk-import-text").fill(
-      "https://github.com/example/sample\\nhttps://vc.ru/");
+      "https://github.com/example/sample\nhttps://vc.ru/");
     await page.locator("#bulk-import-form button").filter({hasText:"Предпросмотр"}).click();
     await page.getByText("Подключение этой площадки ещё не реализовано",
       {exact:false}).waitFor({state:"visible"});
