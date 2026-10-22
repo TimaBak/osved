@@ -11,6 +11,10 @@ class YoutubeSubscriptionsError(RuntimeError):
     pass
 
 
+class YoutubeSubscriptionsAuthError(YoutubeSubscriptionsError):
+    """Google rejected the access token with HTTP 401."""
+
+
 def list_subscriptions(token: str, *, page_token: str = "") -> dict:
     if (not isinstance(page_token, str) or len(page_token) > 256
             or not page_token.isascii()
@@ -27,7 +31,11 @@ def list_subscriptions(token: str, *, page_token: str = "") -> dict:
     try:
         with urlopen(request, timeout=15) as response:
             payload = json.load(response)
-    except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+    except HTTPError as exc:
+        if exc.code == 401:
+            raise YoutubeSubscriptionsAuthError("youtube_token_expired") from exc
+        raise YoutubeSubscriptionsError("youtube_subscriptions_fetch_failed") from exc
+    except (URLError, TimeoutError, ValueError) as exc:
         raise YoutubeSubscriptionsError("youtube_subscriptions_fetch_failed") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise YoutubeSubscriptionsError("youtube_subscriptions_invalid_payload")
@@ -72,7 +80,11 @@ def verify_owner_subscription(token: str, channel_id: str) -> str | None:
     try:
         with urlopen(request, timeout=15) as response:
             payload = json.load(response)
-    except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+    except HTTPError as exc:
+        if exc.code == 401:
+            raise YoutubeSubscriptionsAuthError("youtube_token_expired") from exc
+        raise YoutubeSubscriptionsError("youtube_subscription_verify_failed") from exc
+    except (URLError, TimeoutError, ValueError) as exc:
         raise YoutubeSubscriptionsError("youtube_subscription_verify_failed") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise YoutubeSubscriptionsError("youtube_subscription_invalid_payload")

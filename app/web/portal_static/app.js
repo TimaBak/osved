@@ -52,6 +52,8 @@ const errors={
   youtube_resolver_unconfigured:"Для @ника пока не настроен Monid. Ссылка /channel/UC… добавляется бесплатно.",
   invalid_youtube_channel:"Это не ссылка на публичный YouTube-канал.",
   youtube_channel_unavailable:"Не удалось подтвердить канал. Проверь ссылку или повтори позже.",
+  youtube_reconnect_required:"Сессия Google истекла. Нажми «Переподключить YouTube» и разреши доступ снова.",
+  invalid_public_source:"Некорректный публичный источник. Проверь имя репозитория.",
   youtube_not_in_subscriptions:"Канал больше не найден среди подписок этого YouTube-аккаунта.",
   youtube_subscription_verify_failed:"YouTube не подтвердил подписку. Проверь доступ Google и повтори попытку.",
   youtube_not_connected:"Сначала подключи YouTube-аккаунт.",
@@ -832,30 +834,19 @@ function render(){
     accounts.append(el("h2","","Мои подключённые аккаунты"));
     accounts.append(el("p","","Личный вход в ОСВЕД через Telegram не даёт доступа к подпискам других сервисов. GitHub и YouTube подключаются через официальные OAuth-страницы. Разрешения можно отозвать в настройках платформ."));
     for(const [service,key] of [["YouTube","youtube"],["GitHub","github"]]){
-      const row=el("div",key==="youtube"?"oauth-provider-card":"capability-row");
+      const row=el("div","oauth-provider-card");
       const item=state.accountStatus?.accounts?.[key];
-      if(key==="youtube"){
-        const heading=el("div","oauth-provider-heading");
-        heading.append(el("strong","","YouTube"),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
-        row.append(heading);
-        row.append(el("p","oauth-provider-description",item?.connected
-          ?"Просмотри свои подписки и выбери каналы для информационной ленты ОСВЕД."
-          :"Подключи Google-аккаунт, чтобы импортировать подписки YouTube."));
-      }else{
-        row.append(el("strong","",service),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
-        row.append(el("span","",item?.connected
-          ?"Аккаунт подключён."
-          :item?.configuration_present?"OAuth-приложение настроено.":"Требуется настройка OAuth на сервере."));
-      }
+      const heading=el("div","oauth-provider-heading");
+      heading.append(el("strong","",service),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
+      row.append(heading);
+      row.append(el("p","oauth-provider-description",key==="youtube"
+        ?(item?.connected?"Выбирай, какие из твоих YouTube-подписок отслеживать в ОСВЕД.":"Подключи Google-аккаунт, чтобы импортировать подписки.")
+        :(item?.connected?"Добавляй репозитории из Starred и Watching в источники ОСВЕД.":"Подключи GitHub для импорта избранных и отслеживаемых репозиториев.")));
       if(key==="github"){
-        const connect=action("Войти через GitHub","settings",async()=>{
+        const controls=el("div","oauth-provider-actions");
+        const connect=action(item?.connected?"Переподключить GitHub":"Войти через GitHub","settings",async()=>{
           if(!item?.login_available){
-            const missing=(item?.missing||[]).map(code=>({
-              oauth_app:"OAuth-приложение GitHub (Client ID и Client Secret)",
-              token_vault:"ключ шифрования OAUTH_TOKEN_ENCRYPTION_KEY",
-              callback_and_consent:"callback для авторизации"
-            })[code]||code);
-            alert("GitHub OAuth пока нельзя запустить. На сервере требуется: "+(missing.join(", ")||"проверка настройки")+". Пароли и ключи в чат не отправляй.");
+            alert("Проверь Client ID и Client Secret GitHub OAuth на сервере.");
             return;
           }
           connect.disabled=true;
@@ -866,61 +857,140 @@ function render(){
             if(response.authorization_url)window.location.assign(response.authorization_url);
           }catch(error){connect.disabled=false;alert(friendly(error));}
         },"secondary-button");
-        connect.title=item?.login_available?"Подключить аккаунт через GitHub":"Проверить настройку GitHub OAuth";
-        row.append(connect);
         if(item?.connected){
-          const preview=action("Мои GitHub-подписки","search",async()=>{
-            preview.disabled=true;
-            const results=el("div","connection-guide");
-            results.append(el("strong","","Репозитории GitHub — предпросмотр"));
-            for(const collection of ["starred","watching"]){
-              const load=action(collection==="starred"?"Избранные (Starred)":"Отслеживаемые (Watching)","search",async()=>{
-                load.disabled=true;
-                try{
-                  const data=await api("/api/accounts/github/subscriptions?collection="+collection);
-                  results.replaceChildren(el("strong","",collection==="starred"?"Starred":"Watching"));
-                  if(!data.repositories?.length)results.append(el("p","","Публичные репозитории не найдены или доступ ограничен."));
-                  for(const repository of (data.repositories||[])){
-                    const entry=el("div","capability-row");
-                    entry.append(el("strong","",repository.full_name));
-                    entry.append(el("span","",repository.description||""));
-                    const add=action("Добавить в источники","plus",async()=>{
-                      add.disabled=true;
-                      try{
-                        await api("/api/public-sources/add",{
-                          method:"POST",body:JSON.stringify({kind:"github",value:repository.full_name,topic:""})
-                        });
-                        add.lastElementChild.textContent="Добавлено";
-                      }catch(error){add.disabled=false;alert(friendly(error));}
-                    },"secondary-button");
-                    entry.append(add);results.append(entry);
-                  }
-                  results.append(load);
-                  load.disabled=false;
-                }catch(error){load.disabled=false;alert(friendly(error));}
-              },"secondary-button");
-              results.append(load);
+          const panel=el("section","oauth-subscriptions-panel github-import-panel");
+          panel.hidden=true;
+          const header=el("div","youtube-import-summary");
+          header.append(el("h3","","Мои GitHub-репозитории"));
+          const status=el("p","youtube-import-status","Выбери избранные или отслеживаемые репозитории.");
+          header.append(status);
+          const tabs=el("div","github-import-tabs");
+          const list=el("div","github-import-list");
+          const more=action("Загрузить ещё","plus",()=>loadRepos(),"secondary-button");
+          more.hidden=true;
+          let selected="";
+          let page=1;
+          let busy=false;
+          async function choose(collection){
+            if(busy||!panel.isConnected)return;
+            selected=collection;
+            page=1;
+            list.replaceChildren();
+            for(const tab of tabs.querySelectorAll("button")){
+              const active=tab.dataset.collection===collection;
+              tab.classList.toggle("github-tab-active",active);
+              tab.setAttribute("aria-pressed",String(active));
             }
-            row.append(results);preview.disabled=false;
-          },"secondary-button");
-          row.append(preview);
+            await loadRepos();
+          }
+          async function loadRepos(){
+            if(!selected||busy)return;
+            busy=true;
+            more.disabled=true;
+            status.textContent="Загружаем репозитории…";
+            try{
+              const data=await api("/api/accounts/github/subscriptions?"+
+                new URLSearchParams({collection:selected,page:String(page)}));
+              for(const repository of data.repositories||[]){
+                const card=el("div","youtube-channel-card");
+                const details=el("div","youtube-channel-details");
+                details.append(el("strong","",repository.full_name));
+                if(repository.description)details.append(el("p","github-repo-description",repository.description));
+                const link=external(repository.url,"Открыть на GitHub");
+                if(link)details.append(link);
+                const previous=(state.data?.sources||[]).find(
+                  s=>s.kind==="github"&&s.url===repository.url&&s.id?.startsWith("user_github_")
+                );
+                let sourceId=previous?.id||"";
+                const toggle=action("Добавить в источники","plus",async()=>{
+                  if(sourceId&&!window.confirm(
+                    "Убрать репозиторий из ОСВЕД? GitHub Star/Watching и история материалов сохранятся."
+                  ))return;
+                  const removing=Boolean(sourceId);
+                  toggle.disabled=true;
+                  toggle.querySelector("span").textContent=removing?"Убираем…":"Добавляем…";
+                  try{
+                    if(removing){
+                      await api("/api/public-sources/remove",{
+                        method:"POST",body:JSON.stringify({id:sourceId})
+                      });
+                      sourceId="";
+                    }else{
+                      const result=await api("/api/public-sources/add",{
+                        method:"POST",body:JSON.stringify({
+                          kind:"github",locator:repository.full_name,topic:""
+                        })
+                      });
+                      sourceId=result.id||"";
+                    }
+                    updateToggle();
+                    try{state.data=await api("/api/overview");}catch(_){}
+                  }catch(error){updateToggle();alert(friendly(error));}
+                },"secondary-button");
+                function updateToggle(){
+                  toggle.disabled=false;
+                  toggle.querySelector("span").textContent=sourceId
+                    ?"Убрать из ОСВЕД":"Добавить в источники";
+                  toggle.querySelector("use")?.setAttribute(
+                    "href",sourceId?"#i-close":"#i-plus"
+                  );
+                  card.classList.toggle("youtube-channel-tracked",Boolean(sourceId));
+                }
+                updateToggle();
+                card.append(details,toggle);
+                list.append(card);
+              }
+              page=data.next_page||0;
+              more.hidden=!page;
+              status.textContent="Показаны "+list.children.length+" репозиториев. Добавление не меняет твои подписки GitHub.";
+              if(!list.children.length)status.textContent="В этой коллекции публичных репозиториев пока нет.";
+            }catch(error){
+              status.textContent="Не удалось загрузить GitHub: "+friendly(error);
+              more.hidden=true;
+            }finally{busy=false;more.disabled=false;}
+          }
+          for(const [collection,label] of [["starred","Избранные (Starred)"],["watching","Отслеживаемые (Watching)"]]){
+            const tab=action(label,"search",()=>choose(collection),"secondary-button");
+            tab.dataset.collection=collection;
+            tab.setAttribute("aria-pressed","false");
+            tabs.append(tab);
+          }
+          panel.append(header,tabs,list,more);
+          const open=action("Показать GitHub-подписки","search",async()=>{
+            const showing=panel.hidden;
+            panel.hidden=!showing;
+            open.querySelector("span").textContent=showing
+              ?"Скрыть GitHub-подписки":"Показать GitHub-подписки";
+            if(showing){
+              for(const other of accounts.querySelectorAll(".oauth-subscriptions-panel")){
+                if(other!==panel)other.hidden=true;
+              }
+              for(const toggle of accounts.querySelectorAll("[data-panel-open-label]")){
+                if(toggle!==open)toggle.querySelector("span").textContent=toggle.dataset.panelOpenLabel;
+              }
+              if(!selected)await choose("starred");
+            }
+          },"primary-button");
+          open.dataset.panelOpenLabel="Показать GitHub-подписки";
+          controls.append(open,connect);
           const disconnect=action("Отключить GitHub","close",async()=>{
-            if(!window.confirm("Удалить локальный токен GitHub из ОСВЕД? Ранее добавленные источники сохранятся. Разрешение в GitHub нужно отозвать отдельно."))return;
+            if(!window.confirm("Удалить локальный токен GitHub из ОСВЕД? Источники сохранятся."))return;
             disconnect.disabled=true;
             try{
               const accountId=(item.account_ids||[])[0];
               if(!accountId)throw Error("github_not_connected");
-              const outcome=await api("/api/accounts/github/disconnect",{
+              await api("/api/accounts/github/disconnect",{
                 method:"POST",body:JSON.stringify({account_id:accountId})
               });
-              if(outcome.ok){
-                state.accountStatus=await api("/api/accounts/status");
-                render();
-                alert("GitHub отключён в ОСВЕД. Для полного отзыва разрешения открой GitHub → Settings → Applications → Authorized OAuth Apps.");
-              }
+              state.accountStatus=await api("/api/accounts/status");
+              render();
             }catch(error){disconnect.disabled=false;alert(friendly(error));}
           },"secondary-button");
-          row.append(disconnect);
+          controls.append(disconnect);
+          row.append(controls,panel);
+        }else{
+          controls.append(connect);
+          row.append(controls);
         }
       }else{
         const controls=el("div","oauth-provider-actions");
@@ -938,7 +1008,7 @@ function render(){
           }catch(error){youtube.disabled=false;alert(friendly(error));}
         },"secondary-button");
         if(item?.connected){
-          const panel=el("section","youtube-import-panel");
+          const panel=el("section","oauth-subscriptions-panel youtube-import-panel");
           panel.hidden=true;
           const info=el("div","youtube-import-summary");
           const summary=el("h3","","Подписки YouTube");
@@ -955,9 +1025,16 @@ function render(){
               return;
             }
             panel.hidden=false;
+            for(const other of accounts.querySelectorAll(".oauth-subscriptions-panel")){
+              if(other!==panel)other.hidden=true;
+            }
+            for(const toggle of accounts.querySelectorAll("[data-panel-open-label]")){
+              if(toggle!==open)toggle.querySelector("span").textContent=toggle.dataset.panelOpenLabel;
+            }
             open.querySelector("span").textContent="Скрыть подписки";
             if(!loaded)await loadChannels();
           },"primary-button");
+          open.dataset.panelOpenLabel="Показать мои подписки";
           let loaded=false;
           let cursor="";
           let count=0;

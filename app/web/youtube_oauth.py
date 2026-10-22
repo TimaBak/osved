@@ -64,3 +64,36 @@ def own_channel_id(access_token: str) -> str:
     if not isinstance(items, list) or not items or not isinstance(items[0].get("id"), str):
         raise YoutubeOAuthError("youtube_channel_not_found")
     return items[0]["id"]
+
+
+class YoutubeReconnectRequired(YoutubeOAuthError):
+    """Google rejected the refresh token; the owner must authorize again."""
+
+
+def refresh_access_token(client_id: str, client_secret: str, refresh_token: str) -> str:
+    """Exchange a saved refresh token on Google's fixed token endpoint."""
+    if not client_id or not client_secret or not refresh_token:
+        raise YoutubeReconnectRequired("youtube_reconnect_required")
+    body = urlencode({
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }).encode("utf-8")
+    request = Request(
+        "https://oauth2.googleapis.com/token", data=body, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urlopen(request, timeout=12) as response:
+            payload = json.load(response)
+    except HTTPError as exc:
+        if exc.code in {400, 401}:
+            raise YoutubeReconnectRequired("youtube_reconnect_required") from exc
+        raise YoutubeOAuthError("youtube_token_refresh_failed") from exc
+    except (URLError, TimeoutError, ValueError) as exc:
+        raise YoutubeOAuthError("youtube_token_refresh_failed") from exc
+    access = payload.get("access_token") if isinstance(payload, dict) else None
+    if not isinstance(access, str) or not access:
+        raise YoutubeOAuthError("youtube_token_refresh_failed")
+    return access

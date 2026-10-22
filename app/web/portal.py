@@ -786,7 +786,9 @@ async def youtube_import_subscription(request: web.Request) -> web.Response:
     """
     from app.telegram_bot.bot import configured_owner_id
     from app.video.channels import CHANNEL_ID
-    from app.web.oauth_vault import connected_accounts, read_tokens
+    from app.web.oauth_vault import connected_accounts
+    from app.web.youtube_access import with_youtube_access
+    from app.web.youtube_oauth import YoutubeOAuthError, YoutubeReconnectRequired
     from app.web.youtube_subscriptions import (
         YoutubeSubscriptionsError,
         verify_owner_subscription,
@@ -807,13 +809,10 @@ async def youtube_import_subscription(request: web.Request) -> web.Response:
         )
         if len(accounts) != 1:
             return error("youtube_account_selection_required", 409)
-        tokens = await asyncio.to_thread(
-            read_tokens, state.repository, encryption_key=key.get_secret_value(),
-            provider="youtube", owner_id=owner_id, account_id=accounts[0],
+        title = await asyncio.to_thread(
+            with_youtube_access, state.settings, state.repository, owner_id,
+            accounts[0], lambda access: verify_owner_subscription(access, channel),
         )
-        if not tokens:
-            return error("youtube_not_connected", 409)
-        title = await asyncio.to_thread(verify_owner_subscription, tokens[0], channel)
         if not title:
             return error("youtube_not_in_subscriptions", 409)
         result = await asyncio.to_thread(
@@ -822,7 +821,9 @@ async def youtube_import_subscription(request: web.Request) -> web.Response:
         )
     except (ValueError, TypeError, KeyError):
         return error("invalid_youtube_channel")
-    except YoutubeSubscriptionsError:
+    except YoutubeReconnectRequired:
+        return error("youtube_reconnect_required", 409)
+    except (YoutubeOAuthError, YoutubeSubscriptionsError):
         return error("youtube_subscription_verify_failed", 502)
     except ChannelError as exc:
         return web.json_response({
@@ -836,7 +837,9 @@ async def youtube_import_subscription(request: web.Request) -> web.Response:
 
 async def youtube_subscriptions_preview(request: web.Request) -> web.Response:
     from app.telegram_bot.bot import configured_owner_id
-    from app.web.oauth_vault import connected_accounts, read_tokens
+    from app.web.oauth_vault import connected_accounts
+    from app.web.youtube_access import with_youtube_access
+    from app.web.youtube_oauth import YoutubeOAuthError, YoutubeReconnectRequired
     from app.web.youtube_subscriptions import (
         YoutubeSubscriptionsError,
         list_subscriptions,
@@ -853,18 +856,18 @@ async def youtube_subscriptions_preview(request: web.Request) -> web.Response:
         )
         if len(accounts) != 1:
             return error("youtube_account_selection_required", 409)
-        token_pair = await asyncio.to_thread(
-            read_tokens, state.repository, encryption_key=key.get_secret_value(),
-            provider="youtube", owner_id=owner_id, account_id=accounts[0],
-        )
-        if not token_pair:
-            return error("youtube_not_connected", 409)
         result = await asyncio.to_thread(
-            list_subscriptions, token_pair[0], page_token=request.query.get("page", ""),
+            with_youtube_access, state.settings, state.repository, owner_id,
+            accounts[0],
+            lambda access: list_subscriptions(
+                access, page_token=request.query.get("page", ""),
+            ),
         )
     except ValueError:
         return error("invalid_youtube_page")
-    except YoutubeSubscriptionsError:
+    except YoutubeReconnectRequired:
+        return error("youtube_reconnect_required", 409)
+    except (YoutubeOAuthError, YoutubeSubscriptionsError):
         return error("youtube_subscriptions_fetch_failed", 502)
     # Annotate subscribed channels with their current OSVED source status.
     # No tokens or unrelated source metadata are returned to the browser.
