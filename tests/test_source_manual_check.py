@@ -79,3 +79,65 @@ def test_manual_check_only_permits_a_single_owner_approved_public_source(tmp_pat
             await client.close()
 
     asyncio.run(scenario())
+
+
+
+def test_oauth_imported_youtube_channel_manual_check_uses_rss_adapter(tmp_path):
+    """Regression: YouTube is configured as youtube_rss, not youtube."""
+    from app.collectors.registry import adapter_id_for
+    from app.config import runtime_source_registry
+    from app.video.channels import ChannelService
+
+    async def scenario():
+        settings, repo, _ = fixture(tmp_path)
+        settings.telegram_bot_token = SecretStr(BOT_TOKEN)
+        channel_id = "UC" + "b" * 22
+        saved = ChannelService(settings, repo).add_verified(
+            channel_id, "Авторизованный канал", 123,
+        )
+        source_id = saved["source_id"]
+        source = next(
+            row for row in runtime_source_registry(settings).sources
+            if row.id == source_id
+        )
+        assert source.kind.value == "youtube"
+        assert adapter_id_for(source, settings) == "youtube_rss"
+        client = TestClient(TestServer(create_portal(settings, repo)))
+        await client.start_server()
+        try:
+            code = issue_login_code(
+                repo, token=BOT_TOKEN, owner_id=123, now=int(time.time())
+            )
+            login = await client.post("/api/code-login", json={"code": code})
+            csrf = (await login.json())["csrf"]
+            headers = {
+                "Cookie": f"{COOKIE}={login.cookies[COOKIE].value}",
+                "X-CSRF-Token": csrf,
+            }
+            mock_run = {
+                "sources_attempted": 1, "cost_usd": 0.0,
+                "sources": [{
+                    "source_id": source_id, "status": "empty",
+                    "seen": 0, "inserted": 0,
+                }],
+            }
+            with patch(
+                "app.collectors.orchestrator.collect_due_sources",
+                return_value=mock_run,
+            ) as collect:
+                response = await client.post(
+                    "/api/source/check", json={"id": source_id},
+                    headers=headers,
+                )
+                assert response.status == 200
+                data = await response.json()
+                assert data["attempted"] is True
+                assert data["results"][0]["status"] == "empty"
+                _, kwargs = collect.call_args
+                assert kwargs["source_ids"] == [source_id]
+                assert kwargs["force"] is False
+                assert kwargs["dry_run"] is False
+        finally:
+            await client.close()
+
+    asyncio.run(scenario())
