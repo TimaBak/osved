@@ -551,7 +551,7 @@ function render(){
     header.append(meta);
     const access=el("div","connection-guide");
     access.append(el("strong","","Личные подписки из аккаунтов"));
-    access.append(el("p","","Импорт через OAuth или собственный файл появится после безопасного подключения каждого провайдера. Сейчас можно управлять уже настроенными публичными источниками. Пароли и файлы браузерной сессии не требуются."));
+    access.append(el("p","","TXT/CSV и список публичных ссылок можно загрузить ниже. Личные подписки из подключённых аккаунтов — отдельный этап OAuth с правом отзыва доступа. Пароли и браузерные сессии не требуются."));
     header.append(access);
     $("#section-tools").append(header);
     const addPanel=el("section","panel source-add-panel");
@@ -743,6 +743,21 @@ function render(){
       }
       panel.append(details);
     }
+    const provider=el("section","connection-guide");
+    provider.append(el("strong","","AI-провайдер и выбор моделей"));
+    provider.append(el("p","",
+      "Основной выбранный провайдер — Codex Sale. Его клиент и меню моделей находятся в незавершённом PR #1: в опубликованной версии интеграция ещё не включена. Сейчас YouTube-пайплайн технически зависит от OpenRouter и Monid. Не вводи ключи сюда — для них нужен защищённый серверный канал."));
+    panel.append(provider);
+    const accounts=el("section","panel account-status");
+    accounts.append(el("h2","","Мои подключённые аккаунты"));
+    accounts.append(el("p","","Личный вход в ОСВЕД через Telegram — отдельно от чтения ваших подписок. Для каждого внешнего аккаунта требуется официальное разрешение на чтение и кнопка отзыва доступа. Подключение ещё не реализовано: отображаем реальный статус."));
+    for(const service of ["YouTube","Telegram (личные подписки)","X","Reddit","GitHub"]){
+      const row=el("div","capability-row");
+      row.append(el("strong","",service),pill("НЕ ПОДКЛЮЧЁН","tag off"));
+      row.append(el("span","","Авторизация и импорт личных подписок появятся после OAuth/API-проверки. Сейчас доступны публичные ссылки через «Источники»."));
+      accounts.append(row);
+    }
+    $("#section-tools").append(accounts);
     panel.append(el("p","","Источник данных: текущая SQLite ОСВЕД. Оформление — светлая бело-синяя и тёмная серо-синяя темы."));
     const themeButton=action("Сменить тему","moon",()=>{
       theme(document.documentElement.dataset.theme==="dark"?"light":"dark");
