@@ -99,7 +99,9 @@ def add(
         db.execute(
             """INSERT INTO owner_public_sources
                (id,kind,locator,title,topic,added_at,removed_at) VALUES(?,?,?,?,?,?,NULL)
-               ON CONFLICT(id) DO UPDATE SET removed_at=NULL,title=excluded.title,topic=excluded.topic""",
+               ON CONFLICT(id) DO UPDATE SET removed_at=NULL,title=excluded.title,
+               topic=CASE WHEN excluded.topic<>'' THEN excluded.topic
+                          ELSE owner_public_sources.topic END""",
             (identifier, kind, locator, title, topic, now),
         )
         if not existing or existing["removed_at"] is not None:
