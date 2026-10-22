@@ -85,7 +85,11 @@ def diagnose(
             issues.append("no_valid_cards")
         if counts["sent_deliveries"] == 0:
             issues.append("no_sent_deliveries")
+        from app.ops.source_observability import snapshots, summarize
+
+        source_collection = summarize(snapshots(connection))
         return {
+            "source_collection": source_collection,
             "database": str(database),
             "schedule_enabled": settings.get("schedule_enabled"),
             "schedule_dry_run": settings.get("schedule_dry_run"),

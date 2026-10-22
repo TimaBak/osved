@@ -336,3 +336,9 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
   -webkit-line-clamp:3;line-clamp:3;overflow:hidden;max-height:5em;
   color:var(--muted);font-size:13px;line-height:1.58;margin:0}
 .tile p.tile-summary-empty{color:var(--muted-low);font-style:italic}
+
+/* Collection evidence is separate from a registered source or OAuth connection. */
+.source-collection-facts{display:flex;flex-direction:column;gap:4px;
+  border-top:1px solid var(--border);padding-top:12px;
+  color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.source-collection-facts .source-collection-error{color:var(--warning)}

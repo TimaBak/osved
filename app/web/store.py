@@ -356,7 +356,10 @@ class DashboardStore:
                 for row in rows:
                     if self.serialize(row, kind)["folder"] == folder and row.get("source_id"):
                         associated.add(row["source_id"])
+        from app.ops.source_observability import snapshots
+
         with self.repository.connection() as db:
+            diagnostic = snapshots(db)
             rows = [
                 dict(row)
                 for row in db.execute(
@@ -421,6 +424,7 @@ class DashboardStore:
                     "enabled": enabled,
                     "topics": decoded(row["topics_json"], []),
                     "last_success_at": row["last_success_at"],
+                    "collection": diagnostic.get(row["id"], {}),
                     "status": "paused"
                     if not enabled
                     else "error"
