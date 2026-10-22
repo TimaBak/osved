@@ -533,7 +533,10 @@ async def add_youtube_source(request: web.Request) -> web.Response:
         url = data["url"]
         if not isinstance(url, str) or len(url) > 2048:
             return error("invalid_youtube_channel")
-        normalized = channel_url(url)
+        try:
+            normalized = channel_url(url)
+        except ChannelError:
+            return error("invalid_youtube_channel")
         # Handles require Monid resolution and may incur charges. The web
         # catalog deliberately implements the guaranteed free direct-ID path.
         if "/channel/UC" not in normalized:
