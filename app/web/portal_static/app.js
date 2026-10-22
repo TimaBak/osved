@@ -14,7 +14,7 @@ const el=(tag,cls,value)=>{
   if(value!==undefined)node.textContent=String(value);
   return node;
 };
-const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,sourceGroup:"all",sourceTopic:"all"};
+const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,sourceGroup:"all",sourceTopic:"all"};
 const tg=window.Telegram&&window.Telegram.WebApp;
 const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
@@ -748,6 +748,21 @@ function render(){
     provider.append(el("p","",
       "Основной выбранный провайдер — Codex Sale. Его клиент и меню моделей находятся в незавершённом PR #1: в опубликованной версии интеграция ещё не включена. Сейчас YouTube-пайплайн технически зависит от OpenRouter и Monid. Не вводи ключи сюда — для них нужен защищённый серверный канал."));
     panel.append(provider);
+    if(state.aiModels){
+      const models=el("section","connection-guide");
+      models.append(el("strong","","AI-модели и обработка · действующие назначения"));
+      models.append(el("p","","Настройки читаются из общего хранилища сайта и Telegram. Исполнение через Codex Sale пока не подтверждено; выбор модели не означает, что генерация включена."));
+      const taskNames={news:"Новости",research:"Исследования",search:"Поиск",video:"Видео"};
+      for(const [task,selection] of Object.entries(state.aiModels.selections||{})){
+        const row=el("div","capability-row");
+        row.append(el("strong","",taskNames[task]||task));
+        row.append(el("span","",selection.model+" · "+selection.origin));
+        row.append(pill(selection.verified?"ПРОВЕРЕНО":"НЕ ПРОВЕРЕНО",selection.verified?"tag":"tag off"));
+        models.append(row);
+      }
+      models.append(el("p","","Изменение моделей появится после проверки доступного каталога и серверных лимитов. Ключи API сюда не вводятся."));
+      panel.append(models);
+    }
     const accounts=el("section","panel account-status");
     accounts.append(el("h2","","Мои подключённые аккаунты"));
     accounts.append(el("p","","Личный вход в ОСВЕД через Telegram — отдельно от чтения ваших подписок. Для каждого внешнего аккаунта требуется официальное разрешение на чтение и кнопка отзыва доступа. Подключение ещё не реализовано: отображаем реальный статус."));
@@ -942,6 +957,8 @@ async function loadDashboard(){
   state.data=data;
   try{state.capabilities=await api("/api/capabilities");}
   catch(_){state.capabilities=null;}
+  try{state.aiModels=await api("/api/ai/models");}
+  catch(_){state.aiModels=null;}
   render();showShell();
 }
 async function refresh(){
