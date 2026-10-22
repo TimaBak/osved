@@ -709,6 +709,40 @@ async def source_update(request: web.Request) -> web.Response:
 
 
 
+async def account_connection_status(request: web.Request) -> web.Response:
+    """Never claim OAuth is usable before state, token vault and revoke exist."""
+    settings = request.app[STATE].settings
+    github_configured = bool(
+        settings.oauth_github_client_id and settings.oauth_github_client_secret
+    )
+    youtube_configured = bool(
+        settings.oauth_google_client_id and settings.oauth_google_client_secret
+    )
+    vault_configured = settings.oauth_token_encryption_key is not None
+    return web.json_response({
+        "accounts": {
+            "github": {
+                "configuration_present": github_configured,
+                "connected": False,
+                "login_available": False,
+                "missing": (["oauth_app"] if not github_configured else [])
+                + (["token_vault"] if not vault_configured else [])
+                + ["callback_and_consent"],
+            },
+            "youtube": {
+                "configuration_present": youtube_configured,
+                "connected": False,
+                "login_available": False,
+                "missing": (["oauth_app"] if not youtube_configured else [])
+                + (["token_vault"] if not vault_configured else [])
+                + ["callback_and_consent"],
+            },
+        },
+        "token_vault_configured": vault_configured,
+        "external_credentials_exposed": False,
+    })
+
+
 async def ai_model_settings(request: web.Request) -> web.Response:
     """Owner-only read of effective selections; never exposes provider secrets."""
     from app.llm.routing_policy import fallback_permitted, resolve_selection
@@ -853,6 +887,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
     app.router.add_get("/api/capabilities", capabilities)
+    app.router.add_get("/api/accounts/status", account_connection_status)
     app.router.add_get("/api/ai/models", ai_model_settings)
     app.router.add_get("/api/ai/catalog", ai_model_catalog)
     app.router.add_post("/api/ai/models", ai_model_select)
