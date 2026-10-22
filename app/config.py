@@ -252,6 +252,11 @@ class Settings(BaseSettings):
     delivery_format: DeliveryFormat = DeliveryFormat.REGULAR
     news_delivery_mode: Literal["scheduled", "on_rating", "hybrid"] = "hybrid"
 
+    oauth_github_client_id: str | None = None
+    oauth_github_client_secret: SecretStr | None = None
+    oauth_google_client_id: str | None = None
+    oauth_google_client_secret: SecretStr | None = None
+    oauth_token_encryption_key: SecretStr | None = None
     codex_sale_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = "google/gemini-2.5-flash-lite"
