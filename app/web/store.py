@@ -365,9 +365,23 @@ class DashboardStore:
                     "LEFT JOIN youtube_channels y ON y.source_id=s.id ORDER BY s.name,s.id"
                 )
             ]
+        removed_public_ids: set[str] = set()
+        with self.repository.connection() as db:
+            if db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='owner_public_sources'"
+            ).fetchone():
+                removed_public_ids = {
+                    record["id"] for record in db.execute(
+                        "SELECT id FROM owner_public_sources WHERE removed_at IS NOT NULL"
+                    )
+                }
         result = []
         for row in rows:
-            if row["role"] == "own_history" or row["channel_removed_at"]:
+            if (
+                row["role"] == "own_history"
+                or row["channel_removed_at"]
+                or row["id"] in removed_public_ids
+            ):
                 continue
             enabled = (
                 row["enabled_override"] == "true"
@@ -394,6 +408,10 @@ class DashboardStore:
                 url = "https://www.youtube.com/channel/" + locator
             if not url and row["kind"] == "x":
                 url = "https://x.com/" + locator.lstrip("@")
+            if not url and row["kind"] == "github" and locator.count("/") == 1:
+                url = "https://github.com/" + locator
+            if not url and row["kind"] == "reddit":
+                url = "https://www.reddit.com/r/" + locator.removeprefix("r/") + "/"
             result.append(
                 {
                     "id": row["id"],

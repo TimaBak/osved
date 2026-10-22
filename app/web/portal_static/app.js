@@ -438,6 +438,53 @@ function render(){
       "Личный аккаунт X, Reddit или YouTube пока нельзя авторизовать здесь. Для чтения ваших подписок нужен официальный OAuth, отдельное согласие и возможность отозвать доступ. Это следующий этап, а не работающая кнопка.");
     addPanel.append(hint);
     $("#section-tools").append(addPanel);
+    const publicPanel=el("section","panel source-add-panel");
+    publicPanel.append(el("h2","","Добавить GitHub или Reddit"));
+    publicPanel.append(el("p","","Добавь публичный репозиторий или сообщество в радар ОСВЕД. Подписка сразу сохраняется, а новые публикации появятся после успешного сбора. Личный аккаунт и API-ключ не нужны."));
+    const publicForm=el("form");publicForm.id="public-source-add-form";
+    const kindLabel=el("label","","Платформа");kindLabel.htmlFor="public-source-kind";
+    const kindSelect=el("select","source-filter");kindSelect.id="public-source-kind";
+    for(const [value,title] of [["github","GitHub · релизы"],["reddit","Reddit · сообщество"]]){
+      const opt=el("option","",title);opt.value=value;kindSelect.append(opt);
+    }
+    const urlLabel=el("label","","Репозиторий или сообщество");urlLabel.htmlFor="public-source-locator";
+    const urlInput=el("input");urlInput.id="public-source-locator";urlInput.required=true;urlInput.maxLength=300;
+    urlInput.placeholder="owner/repository";
+    kindSelect.addEventListener("change",()=>{
+      urlInput.placeholder=kindSelect.value==="github"?"owner/repository":"r/Python";
+    });
+    const topicLabel=el("label","","Тема в ОСВЕД");topicLabel.htmlFor="public-source-topic";
+    const topicSelect=el("select","source-filter");topicSelect.id="public-source-topic";
+    const fallback=el("option","","Без категории");fallback.value="";topicSelect.append(fallback);
+    for(const topic of (state.data.personalization?.topics||[])){
+      const opt=el("option","",topic.title);opt.value=topic.id;topicSelect.append(opt);
+    }
+    const addButton=el("button","primary-button","Подключить публичный источник");
+    addButton.type="submit";
+    const publicStatus=el("p","source-add-status");publicStatus.setAttribute("role","status");
+    publicForm.append(kindLabel,kindSelect,urlLabel,urlInput,topicLabel,topicSelect,addButton,publicStatus);
+    publicForm.addEventListener("submit",async event=>{
+      event.preventDefault();addButton.disabled=true;publicStatus.textContent="Сохраняю источник…";
+      try{
+        const added=await api("/api/public-sources/add",{
+          method:"POST",body:JSON.stringify({
+            kind:kindSelect.value,locator:urlInput.value.trim(),topic:topicSelect.value
+          })
+        });
+        state.data=await api("/api/overview");render();
+        const status=$("#public-source-add-form .source-add-status");
+        if(status)status.textContent=added.existing?
+          "Источник уже подключён.":"Источник добавлен. Сбор начнётся по расписанию.";
+      }catch(error){
+        publicStatus.textContent=friendly(error)+
+          (error.payload?.detail?" "+error.payload.detail:"");
+        addButton.disabled=false;
+      }
+    });
+    publicPanel.append(publicForm);
+    publicPanel.append(el("p","caption source-account-help",
+      "GitHub читает только публичные релизы; Reddit — открытые сообщения сообщества. Чтобы импортировать личные подписки из X/Reddit/YouTube, понадобится отдельный официальный OAuth."));
+    $("#section-tools").append(publicPanel);
     const chosen=filter(streams).filter(s=>
       (state.sourceGroup==="all"||s.category===state.sourceGroup)&&
       (state.sourceTopic==="all"||(Array.isArray(s.topics)&&s.topics.includes(state.sourceTopic)))
@@ -486,6 +533,23 @@ function render(){
             }catch(error){remove.lastElementChild.textContent=friendly(error);remove.disabled=false;}
           },"secondary-button source-remove");
           actions.append(remove);
+        }
+        if((source.kind==="github"||source.kind==="reddit")
+            &&source.id.startsWith("user_"+source.kind+"_")){
+          const removePublic=action("Удалить источник","close",async()=>{
+            if(!window.confirm("Удалить подписку? История собранных материалов останется."))return;
+            removePublic.disabled=true;
+            try{
+              await api("/api/public-sources/remove",{
+                method:"POST",body:JSON.stringify({id:source.id})
+              });
+              state.data=await api("/api/overview");render();
+            }catch(error){
+              removePublic.lastElementChild.textContent=friendly(error);
+              removePublic.disabled=false;
+            }
+          },"secondary-button source-remove");
+          actions.append(removePublic);
         }
         tile.append(actions);root.append(tile);
       }
