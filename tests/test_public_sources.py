@@ -72,8 +72,8 @@ def test_add_restart_pause_remove_and_restore(tmp_path):
     plan = collect_due_sources(
         settings, repo, source_ids=[source_id], dry_run=True
     )
-    assert plan["rows"][0]["status"] == "planned"
-    assert plan["rows"][0]["estimated_cost_usd"] == 0
+    assert plan["sources"][0]["status"] == "planned"
+    assert plan["sources"][0]["estimated_cost_usd"] == 0
     repo.set_runtime_setting("source_enabled:" + source_id, "false")
     assert repo.get_runtime_setting("source_enabled:" + source_id) == "false"
     remove(repo, settings, source_id)
