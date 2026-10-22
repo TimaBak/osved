@@ -40,7 +40,8 @@ def test_youtube_callback_single_use_and_encrypted_storage(tmp_path):
             assert args["scope"] == ["https://www.googleapis.com/auth/youtube.readonly"]
             token_state = args["state"][0]
             with (
-                patch("app.web.youtube_oauth.exchange_code", return_value=("test-token", "test-refresh")),
+                patch("app.web.youtube_oauth.exchange_code",
+                      return_value=("test-token", "test-refresh")),
                 patch("app.web.youtube_oauth.own_channel_id", return_value="UCtestchannel"),
             ):
                 response = await client.get(
@@ -48,7 +49,9 @@ def test_youtube_callback_single_use_and_encrypted_storage(tmp_path):
                     headers={"Cookie": f"{COOKIE}={cookie}"}, allow_redirects=False,
                 )
             assert response.status == 302
-            status = await client.get("/api/accounts/status", headers={"Cookie": f"{COOKIE}={cookie}"})
+            status = await client.get(
+                "/api/accounts/status", headers={"Cookie": f"{COOKIE}={cookie}"},
+            )
             assert (await status.json())["accounts"]["youtube"]["connected"] is True
             replay = await client.get(
                 "/api/accounts/youtube/callback?code=googlecode&state=" + token_state,
@@ -57,8 +60,12 @@ def test_youtube_callback_single_use_and_encrypted_storage(tmp_path):
             assert replay.status == 403
             from app.web.oauth_vault import read_tokens
 
-            assert read_tokens(repo, encryption_key=settings.oauth_token_encryption_key.get_secret_value(),
-                               provider="youtube", owner_id=123, account_id="UCtestchannel") == ("test-token", "test-refresh")
+            stored = read_tokens(
+                repo,
+                encryption_key=settings.oauth_token_encryption_key.get_secret_value(),
+                provider="youtube", owner_id=123, account_id="UCtestchannel",
+            )
+            assert stored == ("test-token", "test-refresh")
         finally:
             await client.close()
     asyncio.run(run())
