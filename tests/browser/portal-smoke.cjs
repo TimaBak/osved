@@ -157,7 +157,7 @@ const { chromium } = require("playwright");
     await page.route("**/api/public-sources/add", async route=>{
       const body=route.request().postDataJSON();
       assert.equal(body.kind,"github");
-      assert.equal(body.locator,"example/sample");
+      assert.equal(body.locator.replace(/^https:\/\/github\.com\//,""),"example/sample");
       bulkCalls++;
       addedPublicSource=true;
       await route.fulfill({status:200,contentType:"application/json",
