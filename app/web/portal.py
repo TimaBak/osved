@@ -871,6 +871,9 @@ async def startup(app: web.Application) -> None:
     await asyncio.to_thread(state.store.initialize)
     await asyncio.to_thread(ensure_login_schema, state.repository)
     await asyncio.to_thread(initialize_sessions, state.repository)
+    from app.web.oauth_state import initialize_oauth_states
+
+    await asyncio.to_thread(initialize_oauth_states, state.repository)
     await asyncio.to_thread(initialize, state.repository)
     await asyncio.to_thread(initialize_personalization, state.repository)
     await asyncio.to_thread(initialize_hidden_items, state.repository)
