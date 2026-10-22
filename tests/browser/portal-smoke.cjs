@@ -64,7 +64,12 @@ const { chromium } = require("playwright");
         ],
         sources: [
           { id: "rss:example.org", name: "Источник RSS",
-            kind: "rss", enabled: true },
+            kind: "rss", category:"Сайты и RSS", platform:"RSS / Atom",
+            platform_description:"Ленты сайтов и блогов",
+            topics:["ai"], status:"ready", enabled: true },
+          { id:"x:example", name:"Автор X", kind:"x",
+            category:"Социальные сети", platform:"X",
+            topics:["research"],status:"paused",enabled:false },
         ],
         health: { status: "ok", news_24h: 1, last_news_at: null },
         personalization: {
@@ -74,6 +79,14 @@ const { chromium } = require("playwright");
             {id:"space",title:"Космос",priority:0},
           ],
         },
+      }),
+    }));
+    await page.route("**/api/capabilities", route => route.fulfill({
+      status: 200,contentType:"application/json",
+      body:JSON.stringify({
+        video:{ready:false,reason:"ai_provider_unconfigured"},
+        translation:{ready:false,mode:"planned_on_demand"},
+        image_ai:{ready:false},accounts:{oauth_ready:false},
       }),
     }));
     await page.route("**/api/article/news/1", route => route.fulfill({
@@ -150,6 +163,11 @@ const { chromium } = require("playwright");
     await page.getByText("Предварительный сигнал").waitFor({state:"visible"});
     await page.locator('[data-section="sources"]').click();
     await page.getByText("Источник RSS").waitFor({state:"visible"});
+    await page.getByText("Автор X").waitFor({state:"visible"});
+    await page.locator("#source-platform").selectOption("Сайты и RSS");
+    await page.getByText("Источник RSS").waitFor({state:"visible"});
+    assert.equal(await page.getByText("Автор X").count(),0);
+    await page.locator("#source-topic").selectOption("ai");
     await page.getByRole("button", { name: "Приостановить" }).click();
     await page.getByText("ПАУЗА").waitFor({state:"visible"});
     await page.locator('[data-section="feed"]').click();
