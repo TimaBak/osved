@@ -826,7 +826,7 @@ function render(){
     }
     const accounts=el("section","panel account-status");
     accounts.append(el("h2","","Мои подключённые аккаунты"));
-    accounts.append(el("p","","Личный вход в ОСВЕД через Telegram не даёт доступа к подпискам других сервисов. OAuth-авторизация YouTube и GitHub пока не включена: будет доступна после проверки callback, безопасного хранилища токенов и возможности отзыва разрешений."));
+    accounts.append(el("p","","Личный вход в ОСВЕД через Telegram не даёт доступа к подпискам других сервисов. GitHub и YouTube подключаются через официальные OAuth-страницы. Разрешения можно отозвать в настройках платформ."));
     for(const [service,key] of [["YouTube","youtube"],["GitHub","github"]]){
       const row=el("div","capability-row");
       const item=state.accountStatus?.accounts?.[key];
@@ -910,11 +910,20 @@ function render(){
           row.append(disconnect);
         }
       }else{
-        const pending=el("button","","Войти через YouTube");
-        pending.type="button";
-        pending.title="Показать статус подключения YouTube";
-        pending.addEventListener("click",()=>alert("YouTube OAuth пока разрабатывается. Кнопка входа будет активирована после реализации безопасного callback Google и проверки разрешений."));
-        row.append(pending);
+        const youtube=action(item?.connected?"YouTube подключён":"Войти через YouTube","settings",async()=>{
+          if(!item?.login_available){
+            alert("YouTube OAuth ещё не настроен: зарегистрируй Google OAuth Client и добавь OAUTH_GOOGLE_CLIENT_ID и OAUTH_GOOGLE_CLIENT_SECRET в .env Hermes.");
+            return;
+          }
+          youtube.disabled=true;
+          try{
+            const response=await api("/api/accounts/youtube/start",{
+              method:"POST",body:JSON.stringify({})
+            });
+            if(response.authorization_url)window.location.assign(response.authorization_url);
+          }catch(error){youtube.disabled=false;alert(friendly(error));}
+        },"secondary-button");
+        row.append(youtube);
       }
       accounts.append(row);
     }
