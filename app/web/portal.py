@@ -38,6 +38,7 @@ from app.web.personalization import (
     initialize as initialize_personalization,
 )
 from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
+from app.web.source_catalog import public_capabilities
 from app.web.sessions import (
     SESSION_SECONDS,
     initialize_sessions,
@@ -329,6 +330,11 @@ async def reset_personalization(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def capabilities(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    return web.json_response(public_capabilities(state.settings))
+
+
 async def article_detail(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     kind = request.match_info["kind"]
@@ -577,6 +583,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/code-login", code_login)
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
+    app.router.add_get("/api/capabilities", capabilities)
     app.router.add_post("/api/personalization/topic", set_topic_preference)
     app.router.add_post("/api/personalization/feedback", set_content_feedback)
     app.router.add_post("/api/personalization/reset", reset_personalization)
