@@ -855,6 +855,43 @@ function render(){
         },"secondary-button");
         connect.title=item?.login_available?"Подключить аккаунт через GitHub":"Проверить настройку GitHub OAuth";
         row.append(connect);
+        if(item?.connected){
+          const preview=action("Мои GitHub-подписки","search",async()=>{
+            preview.disabled=true;
+            const results=el("div","connection-guide");
+            results.append(el("strong","","Репозитории GitHub — предпросмотр"));
+            for(const collection of ["starred","watching"]){
+              const load=action(collection==="starred"?"Избранные (Starred)":"Отслеживаемые (Watching)","search",async()=>{
+                load.disabled=true;
+                try{
+                  const data=await api("/api/accounts/github/subscriptions?collection="+collection);
+                  results.replaceChildren(el("strong","",collection==="starred"?"Starred":"Watching"));
+                  if(!data.repositories?.length)results.append(el("p","","Публичные репозитории не найдены или доступ ограничен."));
+                  for(const repository of (data.repositories||[])){
+                    const entry=el("div","capability-row");
+                    entry.append(el("strong","",repository.full_name));
+                    entry.append(el("span","",repository.description||""));
+                    const add=action("Добавить в источники","plus",async()=>{
+                      add.disabled=true;
+                      try{
+                        await api("/api/public-sources/add",{
+                          method:"POST",body:JSON.stringify({kind:"github",value:repository.full_name,topic:""})
+                        });
+                        add.lastElementChild.textContent="Добавлено";
+                      }catch(error){add.disabled=false;alert(friendly(error));}
+                    },"secondary-button");
+                    entry.append(add);results.append(entry);
+                  }
+                  results.append(load);
+                  load.disabled=false;
+                }catch(error){load.disabled=false;alert(friendly(error));}
+              },"secondary-button");
+              results.append(load);
+            }
+            row.append(results);preview.disabled=false;
+          },"secondary-button");
+          row.append(preview);
+        }
       }else{
         const pending=el("button","","Войти через YouTube");
         pending.type="button";

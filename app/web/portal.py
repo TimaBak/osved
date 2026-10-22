@@ -709,6 +709,45 @@ async def source_update(request: web.Request) -> web.Response:
 
 
 
+async def github_subscriptions_preview(request: web.Request) -> web.Response:
+    """Owner-only private preview, excluding private repositories and tokens."""
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.github_subscriptions import GithubSubscriptionsError, list_repositories
+    from app.web.oauth_vault import connected_accounts, read_tokens
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    secret = state.settings.oauth_token_encryption_key
+    if not owner_id or secret is None:
+        return error("github_not_connected", 409)
+    collection = request.query.get("collection", "starred")
+    try:
+        page = int(request.query.get("page", "1"))
+        if collection not in {"starred", "watching"} or not 1 <= page <= 10:
+            return error("invalid_github_collection")
+        accounts = await asyncio.to_thread(
+            connected_accounts, state.repository, provider="github", owner_id=owner_id
+        )
+        if len(accounts) != 1:
+            return error("github_account_selection_required", 409)
+        tokens = await asyncio.to_thread(
+            read_tokens, state.repository, encryption_key=secret.get_secret_value(),
+            provider="github", owner_id=owner_id, account_id=accounts[0],
+        )
+        if not tokens:
+            return error("github_not_connected", 409)
+        items = await asyncio.to_thread(
+            list_repositories, tokens[0], collection=collection, page=page
+        )
+    except (ValueError, GithubSubscriptionsError):
+        return error("github_subscription_fetch_failed", 502)
+    return web.json_response({
+        "collection": collection, "page": page,
+        "repositories": items, "next_page": page + 1 if len(items) == 30 else None,
+        "read_only": True,
+    })
+
+
 async def github_login_start(request: web.Request) -> web.Response:
     """Issue state bound to existing owner session; never silently connect."""
     from app.telegram_bot.bot import configured_owner_id
@@ -970,6 +1009,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/overview", overview)
     app.router.add_get("/api/capabilities", capabilities)
     app.router.add_get("/api/accounts/status", account_connection_status)
+    app.router.add_get("/api/accounts/github/subscriptions", github_subscriptions_preview)
     app.router.add_post("/api/accounts/github/start", github_login_start)
     app.router.add_get("/api/accounts/github/callback", github_login_callback)
     app.router.add_get("/api/ai/models", ai_model_settings)
