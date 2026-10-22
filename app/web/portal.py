@@ -778,6 +778,74 @@ async def github_subscriptions_preview(request: web.Request) -> web.Response:
     })
 
 
+async def youtube_login_start(request: web.Request) -> web.Response:
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.oauth_state import new_oauth_state
+    from app.web.youtube_oauth import authorization_url
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    settings = state.settings
+    if not owner_id or state.session(request) is None:
+        return error("unauthorized", 401)
+    if not (settings.oauth_google_client_id and settings.oauth_google_client_secret
+            and settings.oauth_token_encryption_key):
+        return error("youtube_oauth_unconfigured", 503)
+    nonce = await asyncio.to_thread(
+        new_oauth_state, state.repository, provider="youtube",
+        owner_id=owner_id, browser_session=request.cookies.get(COOKIE, ""),
+    )
+    return web.json_response({
+        "authorization_url": authorization_url(settings.oauth_google_client_id, nonce)
+    })
+
+
+async def youtube_login_callback(request: web.Request) -> web.Response:
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.oauth_state import consume_oauth_state
+    from app.web.oauth_vault import save_tokens
+    from app.web.youtube_oauth import (
+        YOUTUBE_SCOPE,
+        YoutubeOAuthError,
+        exchange_code,
+        own_channel_id,
+    )
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    if not owner_id or state.session(request) is None:
+        return error("unauthorized", 401)
+    code = request.query.get("code", "")
+    if not 1 <= len(code) <= 2048:
+        return error("invalid_oauth_callback")
+    valid = await asyncio.to_thread(
+        consume_oauth_state, state.repository, provider="youtube",
+        state=request.query.get("state", ""), owner_id=owner_id,
+        browser_session=request.cookies.get(COOKIE, ""),
+    )
+    if not valid:
+        return error("invalid_oauth_state", 403)
+    settings = state.settings
+    if not (settings.oauth_google_client_id and settings.oauth_google_client_secret
+            and settings.oauth_token_encryption_key):
+        return error("youtube_oauth_unconfigured", 503)
+    try:
+        access, refresh = await asyncio.to_thread(
+            exchange_code, settings.oauth_google_client_id,
+            settings.oauth_google_client_secret.get_secret_value(), code,
+        )
+        channel_id = await asyncio.to_thread(own_channel_id, access)
+        await asyncio.to_thread(
+            save_tokens, state.repository,
+            encryption_key=settings.oauth_token_encryption_key.get_secret_value(),
+            provider="youtube", owner_id=owner_id, account_id=channel_id,
+            access_token=access, refresh_token=refresh, scopes=YOUTUBE_SCOPE,
+        )
+    except (YoutubeOAuthError, ValueError):
+        return error("youtube_oauth_failed", 502)
+    raise web.HTTPFound("/?youtube_connected=1")
+
+
 async def github_login_start(request: web.Request) -> web.Response:
     """Issue state bound to existing owner session; never silently connect."""
     from app.telegram_bot.bot import configured_owner_id
@@ -853,6 +921,9 @@ async def account_connection_status(request: web.Request) -> web.Response:
     app_state: PortalState = request.app[STATE]
     settings = app_state.settings
     owner_id = configured_owner_id(settings, app_state.repository)
+    youtube_accounts = connected_accounts(
+        app_state.repository, provider="youtube", owner_id=owner_id
+    ) if owner_id else []
     github_accounts = connected_accounts(
         app_state.repository, provider="github", owner_id=owner_id
     ) if owner_id else []
@@ -876,8 +947,9 @@ async def account_connection_status(request: web.Request) -> web.Response:
             },
             "youtube": {
                 "configuration_present": youtube_configured,
-                "connected": False,
-                "login_available": False,
+                "connected": bool(youtube_accounts),
+                "account_ids": youtube_accounts,
+                "login_available": youtube_configured and vault_configured,
                 "missing": (["oauth_app"] if not youtube_configured else [])
                 + (["token_vault"] if not vault_configured else [])
                 + ["callback_and_consent"],
@@ -1041,6 +1113,8 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/accounts/status", account_connection_status)
     app.router.add_get("/api/accounts/github/subscriptions", github_subscriptions_preview)
     app.router.add_post("/api/accounts/github/disconnect", github_disconnect)
+    app.router.add_post("/api/accounts/youtube/start", youtube_login_start)
+    app.router.add_get("/api/accounts/youtube/callback", youtube_login_callback)
     app.router.add_post("/api/accounts/github/start", github_login_start)
     app.router.add_get("/api/accounts/github/callback", github_login_callback)
     app.router.add_get("/api/ai/models", ai_model_settings)
