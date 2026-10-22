@@ -891,6 +891,23 @@ function render(){
             row.append(results);preview.disabled=false;
           },"secondary-button");
           row.append(preview);
+          const disconnect=action("Отключить GitHub","close",async()=>{
+            if(!window.confirm("Удалить локальный токен GitHub из ОСВЕД? Ранее добавленные источники сохранятся. Разрешение в GitHub нужно отозвать отдельно."))return;
+            disconnect.disabled=true;
+            try{
+              const accountId=(item.account_ids||[])[0];
+              if(!accountId)throw Error("github_not_connected");
+              const outcome=await api("/api/accounts/github/disconnect",{
+                method:"POST",body:JSON.stringify({account_id:accountId})
+              });
+              if(outcome.ok){
+                state.accountStatus=await api("/api/accounts/status");
+                render();
+                alert("GitHub отключён в ОСВЕД. Для полного отзыва разрешения открой GitHub → Settings → Applications → Authorized OAuth Apps.");
+              }
+            }catch(error){disconnect.disabled=false;alert(friendly(error));}
+          },"secondary-button");
+          row.append(disconnect);
         }
       }else{
         const pending=el("button","","Войти через YouTube");
