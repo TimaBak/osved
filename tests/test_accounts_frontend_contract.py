@@ -25,3 +25,12 @@ def test_portal_javascript_has_valid_syntax():
         ["node", "--check", str(JAVASCRIPT)],
         check=True, capture_output=True, text=True,
     )
+
+
+def test_feed_title_and_hide_button_contract():
+    source = JAVASCRIPT.read_text(encoding="utf-8")
+    assert 'el("button","tile-title-button",item.title||"Без заголовка")' in source
+    assert 'titleButton.addEventListener("click",()=>openArticle(item,type))' in source
+    assert 'el("p","tile-summary",previewText)' in source
+    assert 'action(hidden?"Вернуть в ленту":"Скрыть",hidden?"refresh":"close"' in source
+    assert '"✕ Скрыть","close"' not in source
