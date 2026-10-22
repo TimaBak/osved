@@ -574,13 +574,18 @@ async def add_youtube_source(request: web.Request) -> web.Response:
         if not isinstance(url, str) or len(url) > 2048:
             return error("invalid_youtube_channel")
         try:
-            normalized = channel_url(url)
+            normalized = channel_url(
+                "https://www.youtube.com/" + url if url.startswith("@") else url
+            )
         except ChannelError:
             return error("invalid_youtube_channel")
-        # Handles require Monid resolution and may incur charges. The web
-        # catalog deliberately implements the guaranteed free direct-ID path.
+        # Only direct UC links are guaranteed free. Resolve @handles via the
+        # existing Monid guard only when the owner opts into THIS request.
         if "/channel/UC" not in normalized:
-            return error("youtube_direct_channel_required")
+            if data.get("allow_paid_resolution") is not True:
+                return error("youtube_resolution_consent_required")
+            if state.settings.monid_api_key is None:
+                return error("youtube_resolver_unconfigured", 503)
         owner_id = configured_owner_id(state.settings, state.repository)
         if not owner_id:
             return error("authentication_unconfigured", 503)
