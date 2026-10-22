@@ -213,6 +213,62 @@ class ChannelService:
             }
 
 
+    def add_verified(self, channel: str, title: str, user_id: int) -> dict:
+        """Persist a channel independently verified by authenticated YouTube API.
+
+        Does not bypass verification for URL/handle based add(). OAuth route
+        verifies the owner is subscribed before calling this method.
+        """
+        if not isinstance(channel, str) or not CHANNEL_ID.fullmatch(channel):
+            raise ChannelError("Недопустимый ID YouTube-канала.")
+        if not isinstance(title, str) or not title.strip() or user_id <= 0:
+            raise ChannelError("YouTube не подтвердил данные подписки.")
+        title = " ".join(title.split())[:180]
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True)
+        with (self.settings.data_dir / "youtube-channels.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            registry = runtime_source_registry(self.settings)
+            self.repository.sync_sources(registry)
+            with self.repository.connection() as db:
+                old = db.execute(
+                    "SELECT * FROM youtube_channels WHERE channel_id=?", (channel,)
+                ).fetchone()
+                if old and old["removed_at"] is None:
+                    return dict(old, existing=True)
+                count = db.execute(
+                    "SELECT COUNT(*) FROM youtube_channels WHERE removed_at IS NULL"
+                ).fetchone()[0]
+                if count >= 100:
+                    raise ChannelError("В радаре уже 100 добавленных каналов.")
+            seed = next(
+                (s for s in registry.sources if s.kind.value == "youtube"
+                 and s.locator == channel), None,
+            )
+            source_id = (
+                seed.id if seed
+                else "youtube_user_" + hashlib.sha256(channel.encode()).hexdigest()[:20]
+            )
+            stamp = datetime.now(UTC).isoformat()
+            with self.repository.connection() as db:
+                db.execute(
+                    "INSERT INTO youtube_channels"
+                    "(channel_id,source_id,title,added_by,added_at,not_before) "
+                    "VALUES(?,?,?,?,?,?) ON CONFLICT(channel_id) DO UPDATE SET "
+                    "removed_at=NULL,title=excluded.title,not_before=excluded.not_before",
+                    (channel, source_id, title, user_id, stamp, stamp),
+                )
+                db.execute(
+                    "INSERT INTO runtime_settings(key,value,updated_at) VALUES(?,'true',?) "
+                    "ON CONFLICT(key) DO UPDATE SET value='true',updated_at=excluded.updated_at",
+                    ("source_enabled:" + source_id, stamp),
+                )
+            self.repository.sync_sources(runtime_source_registry(self.settings))
+            return {
+                "source_id": source_id, "channel_id": channel,
+                "title": title, "existing": False,
+            }
+
+
 def channel_rows(settings: Settings, repository: Repository) -> list[dict]:
     repository.sync_sources(runtime_source_registry(settings))
     with repository.connection() as db:
