@@ -707,6 +707,33 @@ async def source_update(request: web.Request) -> web.Response:
     return web.json_response({"id": source_id, "enabled": enabled})
 
 
+
+
+async def ai_model_settings(request: web.Request) -> web.Response:
+    """Owner-only read of effective selections; never exposes provider secrets."""
+    from app.llm.routing_policy import fallback_permitted, resolve_selection
+
+    state: PortalState = request.app[STATE]
+    tasks = ("news", "research", "search", "video")
+    selections = {
+        task: {
+            "provider": (route := resolve_selection(state.repository, task=task)).provider,
+            "model": route.model,
+            "origin": route.origin,
+            "verified": route.verified,
+        }
+        for task in tasks
+    }
+    return web.json_response({
+        "provider": "codexsale",
+        "provider_status": "not_verified",
+        "settings_scope": "shared_runtime_settings",
+        "openrouter_fallback_opt_in": fallback_permitted(state.repository),
+        "model_execution_enabled": False,
+        "selections": selections,
+    })
+
+
 async def healthz(request: web.Request) -> web.Response:
     return web.json_response({"status": "alive"})
 
@@ -739,6 +766,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/overview", overview)
     app.router.add_get("/api/capabilities", capabilities)
+    app.router.add_get("/api/ai/models", ai_model_settings)
     app.router.add_post("/api/personalization/topic", set_topic_preference)
     app.router.add_post("/api/personalization/feedback", set_content_feedback)
     app.router.add_post("/api/personalization/reset", reset_personalization)
