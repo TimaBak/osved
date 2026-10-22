@@ -489,6 +489,41 @@ def runtime_source_registry(settings: Settings) -> SourceRegistry:
                             }
                         )
                     )
+    # Owner-managed fixed-platform public sources use the same collector registry
+    # as YAML sources. This is a read-only projection from the existing database.
+    if settings.database_path.exists():
+        with closing(
+            sqlite3.connect(settings.database_path.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as db:
+            db.row_factory = sqlite3.Row
+            if db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='owner_public_sources'"
+            ).fetchone():
+                for row in db.execute("SELECT * FROM owner_public_sources ORDER BY id"):
+                    kind = SourceKind(row["kind"])
+                    removed = row["removed_at"] is not None
+                    sources = [entry for entry in sources if entry.id != row["id"]]
+                    sources.append(
+                        SourceConfig(
+                            id=row["id"],
+                            name=row["title"],
+                            kind=kind,
+                            locator=row["locator"],
+                            role=SourceRole.RADAR,
+                            enabled=not removed,
+                            candidate_enabled=not removed,
+                            region="global",
+                            language="und",
+                            topics=[row["topic"]] if row["topic"] else [],
+                            adapter_id=kind.value,
+                            strategy="feed" if kind == SourceKind.REDDIT else "releases",
+                            admission_mode="trigger_only" if removed else "event_candidate",
+                            poll_interval_minutes=240,
+                            daily_call_cap=6,
+                            daily_candidate_cap=15,
+                            options={"not_before": row["added_at"], "removed": removed},
+                        )
+                    )
     return SourceRegistry(
         version=fixed_registry.version,
         sources=sources,
