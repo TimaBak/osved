@@ -38,7 +38,6 @@ from app.web.personalization import (
     initialize as initialize_personalization,
 )
 from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
-from app.web.source_catalog import public_capabilities
 from app.web.sessions import (
     SESSION_SECONDS,
     initialize_sessions,
@@ -46,6 +45,7 @@ from app.web.sessions import (
     lookup_session,
     revoke_session,
 )
+from app.web.source_catalog import public_capabilities
 from app.web.store import DashboardStore
 
 COOKIE = "osved_portal_session"
