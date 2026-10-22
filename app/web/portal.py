@@ -709,6 +709,36 @@ async def source_update(request: web.Request) -> web.Response:
 
 
 
+async def github_disconnect(request: web.Request) -> web.Response:
+    """Remove only the authenticated owner's chosen local GitHub credentials.
+
+    This does not revoke authorization on github.com; the owner can revoke
+    there under Settings -> Applications -> Authorized OAuth Apps.
+    """
+    from app.telegram_bot.bot import configured_owner_id
+    from app.web.oauth_vault import revoke_stored_tokens
+
+    state: PortalState = request.app[STATE]
+    owner_id = configured_owner_id(state.settings, state.repository)
+    if not owner_id:
+        return error("unauthorized", 401)
+    try:
+        payload = await request.json()
+        account_id = payload["account_id"]
+        if not isinstance(account_id, str) or not account_id.isdecimal() or len(account_id) > 24:
+            return error("invalid_account_id")
+    except (ValueError, TypeError, KeyError):
+        return error("invalid_account_id")
+    removed = await asyncio.to_thread(
+        revoke_stored_tokens, state.repository,
+        provider="github", owner_id=owner_id, account_id=account_id,
+    )
+    return web.json_response({
+        "ok": True, "removed": removed, "remote_authorization_revoked": False,
+        "remote_revoke_url": "https://github.com/settings/applications",
+    })
+
+
 async def github_subscriptions_preview(request: web.Request) -> web.Response:
     """Owner-only private preview, excluding private repositories and tokens."""
     from app.telegram_bot.bot import configured_owner_id
@@ -1010,6 +1040,7 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/capabilities", capabilities)
     app.router.add_get("/api/accounts/status", account_connection_status)
     app.router.add_get("/api/accounts/github/subscriptions", github_subscriptions_preview)
+    app.router.add_post("/api/accounts/github/disconnect", github_disconnect)
     app.router.add_post("/api/accounts/github/start", github_login_start)
     app.router.add_get("/api/accounts/github/callback", github_login_callback)
     app.router.add_get("/api/ai/models", ai_model_settings)
