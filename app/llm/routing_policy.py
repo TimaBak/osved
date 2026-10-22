@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.llm.model_registry import TASK_DEFAULTS, TEXT_MODELS
+from app.llm.model_registry import TASK_DEFAULTS
 
 _SCOPE_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$")
 _PROVIDER = "codexsale"
