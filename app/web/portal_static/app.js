@@ -14,7 +14,7 @@ const el=(tag,cls,value)=>{
   if(value!==undefined)node.textContent=String(value);
   return node;
 };
-const state={data:null,csrf:"",section:"overview",query:"",videoJob:null};
+const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,sourceGroup:"all",sourceTopic:"all"};
 const tg=window.Telegram&&window.Telegram.WebApp;
 const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
@@ -369,23 +369,74 @@ function render(){
     },"secondary-button");
     tools.append(reset);$("#section-tools").append(tools);
   }else if(section==="sources"){
-    if(!streams.length)note("Источников нет","Добавление источников сейчас выполняется в Telegram.");
-    filter(streams).forEach(s=>{
-      const tile=el("article","tile");
-      tile.append(el("div","kicker",s.kind||"ИСТОЧНИК"),el("h2","",s.name||s.id));
-      tile.append(pill(s.enabled?"ВКЛЮЧЁН":"ПАУЗА",s.enabled?"tag":"tag off"));
-      const actions=el("div","tile-actions");
-      const button=action(s.enabled?"Приостановить":"Включить","settings",async()=>{
-        button.disabled=true;
-        try{
-          const result=await api("/api/source",{method:"POST",body:JSON.stringify({id:s.id,enabled:!s.enabled})});
-          s.enabled=result.enabled;render();
-        }catch(error){button.lastElementChild.textContent=friendly(error);}
-        finally{button.disabled=false;}
-      });
-      actions.append(button);
-      tile.append(actions);root.append(tile);
-    });
+    const header=el("div","panel source-catalog-head");
+    header.append(el("h2","","Каталог источников"));
+    header.append(el("p","","Платформы → авторы и каналы → темы. Это реально настроенные источники ОСВЕД, а не список всех ваших подписок в приложениях."));
+    const platformControl=el("select","source-filter");platformControl.id="source-platform";
+    platformControl.setAttribute("aria-label","Тип платформы");
+    const topicControl=el("select","source-filter");topicControl.id="source-topic";
+    topicControl.setAttribute("aria-label","Тема");
+    function option(value,label,selected){
+      const node=el("option","",label);node.value=value;node.selected=value===selected;return node;
+    }
+    const groups=[...new Set(streams.map(s=>s.category||"Другие платформы"))].sort((a,b)=>a.localeCompare(b,"ru"));
+    platformControl.append(option("all","Все платформы",state.sourceGroup));
+    groups.forEach(group=>platformControl.append(option(group,group,state.sourceGroup)));
+    const topics=[...new Set(streams.flatMap(s=>Array.isArray(s.topics)?s.topics:[]))].sort((a,b)=>a.localeCompare(b,"ru"));
+    topicControl.append(option("all","Все темы",state.sourceTopic));
+    topics.forEach(topic=>topicControl.append(option(topic,topic,state.sourceTopic)));
+    platformControl.addEventListener("change",()=>{state.sourceGroup=platformControl.value;render();});
+    topicControl.addEventListener("change",()=>{state.sourceTopic=topicControl.value;render();});
+    const controls=el("div","catalog-filters");controls.append(platformControl,topicControl);
+    header.append(controls);
+    const meta=el("p","caption","Подключено к реестру: "+streams.length+
+      " · Включено: "+streams.filter(s=>s.enabled).length+
+      " · Ошибки: "+streams.filter(s=>s.status==="error").length);
+    header.append(meta);
+    const access=el("div","connection-guide");
+    access.append(el("strong","","Личные подписки из аккаунтов"));
+    access.append(el("p","","Импорт через OAuth или собственный файл появится после безопасного подключения каждого провайдера. Сейчас можно управлять уже настроенными публичными источниками. Пароли и файлы браузерной сессии не требуются."));
+    header.append(access);
+    $("#section-tools").append(header);
+    const chosen=filter(streams).filter(s=>
+      (state.sourceGroup==="all"||s.category===state.sourceGroup)&&
+      (state.sourceTopic==="all"||(Array.isArray(s.topics)&&s.topics.includes(state.sourceTopic)))
+    );
+    $("#result-count").textContent=chosen.length+" из "+streams.length+" источников";
+    if(!chosen.length)note("Нет источников с такими фильтрами","Выбери другую платформу или тему. Новые подключения появятся после настройки коннектора.");
+    for(const group of groups){
+      const subset=chosen.filter(s=>(s.category||"Другие платформы")===group);
+      if(!subset.length)continue;
+      root.append(el("h2","source-category-title",group+" · "+subset.length));
+      for(const source of subset){
+        const tile=el("article","tile source-tile");
+        tile.append(el("div","kicker",source.platform||source.kind||"Источник"));
+        tile.append(el("h2","",source.name||source.id));
+        const tags=el("div","source-tags");
+        tags.append(pill(source.enabled?"ВКЛЮЧЁН":"ПАУЗА",source.enabled?"tag":"tag off"));
+        if(source.status==="error")tags.append(pill("ОШИБКА СБОРА","tag off"));
+        if(source.status==="ready"&&source.enabled)tags.append(pill("НЕТ ЗАРЕГИСТРИРОВАННОЙ ОШИБКИ","tag"));
+        for(const topic of (source.topics||[]).slice(0,7))tags.append(pill(topic,"tag"));
+        if(!source.topics?.length)tags.append(pill("ТЕМА НЕ ЗАДАНА","tag off"));
+        tile.append(tags);
+        tile.append(el("p","",source.platform_description||"Публичный источник"));
+        tile.append(el("span","tile-meta",source.last_success_at?
+          "Последний успешный сбор: "+source.last_success_at:"Успешный сбор пока не подтверждён"));
+        const actions=el("div","tile-actions");
+        const link=external(source.url,"Открыть источник");if(link)actions.append(link);
+        const button=action(source.enabled?"Приостановить":"Включить","settings",async()=>{
+          button.disabled=true;
+          try{
+            const result=await api("/api/source",{
+              method:"POST",body:JSON.stringify({id:source.id,enabled:!source.enabled})
+            });
+            source.enabled=result.enabled;await refresh();
+          }catch(error){button.lastElementChild.textContent=friendly(error);button.disabled=false;}
+        });
+        actions.append(button);
+        tile.append(actions);root.append(tile);
+      }
+    }
   }else if(section==="media"){
     mediaTools();
     if(video.length)add(video,"feed");
@@ -396,6 +447,27 @@ function render(){
   }else if(section==="settings"){
     const panel=el("div","panel");
     panel.append(el("h2","","Возможности ОСВЕД"));
+    if(state.capabilities){
+      const details=el("div","capability-list");
+      const entries=[
+        ["Выжимки YouTube",state.capabilities.video?.ready,
+          errors[state.capabilities.video?.reason]||"Подключено"],
+        ["Перевод статей",state.capabilities.translation?.ready,
+          "Нужна отдельная проверенная модель перевода и ограничение затрат"],
+        ["Нейросетевые изображения",state.capabilities.image_ai?.ready,
+          "Провайдер изображений не подключён; SVG-обложки доступны"],
+        ["Личные OAuth-подписки",state.capabilities.accounts?.oauth_ready,
+          "Пока только публичные источники"],
+      ];
+      for(const [name,ready,description] of entries){
+        const row=el("div","capability-row");
+        row.append(el("strong","",name));
+        row.append(pill(ready?"ГОТОВО":"ТРЕБУЕТ ПОДКЛЮЧЕНИЯ",ready?"tag":"tag off"));
+        row.append(el("span","",description));
+        details.append(row);
+      }
+      panel.append(details);
+    }
     panel.append(el("p","","Источник данных: текущая SQLite ОСВЕД. Оформление — светлая бело-синяя и тёмная серо-синяя темы."));
     const themeButton=action("Сменить тему","moon",()=>{
       theme(document.documentElement.dataset.theme==="dark"?"light":"dark");
@@ -476,6 +548,13 @@ document.addEventListener("keydown",event=>{
 function mediaTools(){
   const panel=el("div","panel");
   panel.append(el("h2","","Выжимка YouTube"));
+  if(state.capabilities?.video){
+    const ready=state.capabilities.video.ready;
+    const msg=ready?"Генерация по новым роликам настроена.":
+      "Создание новых выжимок пока недоступно: "+(errors[state.capabilities.video.reason]||"требуется настройка серверных сервисов")+
+      " Уже сохранённые выжимки можно открыть бесплатно.";
+    panel.append(el("p",ready?"capability-ready":"capability-warning",msg));
+  }
   panel.append(el("p","","Вставь ссылку на ролик. ОСВЕД проверит готовые резюме и при подключённом AI-провайдере сможет подготовить новый пересказ по субтитрам. Без субтитров содержание не выдумывается."));
   const form=el("form","media-form");
   form.id="youtube-form";
@@ -570,7 +649,10 @@ async function loadDashboard(){
   if(!data||!Array.isArray(data.feed)||!Array.isArray(data.radar)||!Array.isArray(data.sources)||!data.health){
     throw Error("invalid dashboard payload");
   }
-  state.data=data;render();showShell();
+  state.data=data;
+  try{state.capabilities=await api("/api/capabilities");}
+  catch(_){state.capabilities=null;}
+  render();showShell();
 }
 async function refresh(){
   try{await loadDashboard();}

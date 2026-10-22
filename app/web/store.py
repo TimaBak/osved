@@ -21,6 +21,7 @@ from app.video.reports import VideoReportService
 from app.video.tldr import telegram_tldr
 from app.web.content import evidence_url, plain_text, public_url, safe_html
 from app.web.folders import infer_reading_folder
+from app.web.source_catalog import present_source
 
 FOLDERS = {
     "all": "Вся лента",
@@ -410,7 +411,7 @@ class DashboardStore:
                     "role": row["role"],
                 }
             )
-        return result
+        return [present_source(source) for source in result]
 
     def channels(self) -> list[dict]:
         return [
