@@ -229,9 +229,26 @@ const { chromium } = require("playwright");
     await page.locator("#youtube-channel-url").fill(
       "https://www.youtube.com/channel/UCaaaaaaaaaaaaaaaaaaaaaa");
     await page.locator("#youtube-add-form button[type=submit]").click();
-    await page.getByText("Демонстрационный канал",{exact:false}).first()
-      .waitFor({state:"visible"});
-    assert.equal(addedChannel,true);
+    // Check both the API request and the visible source registry entry. A
+    // previously failing smoke timed out here without identifying which failed.
+    await page.waitForTimeout(250);
+    assert.equal(addedChannel,true,
+      "YouTube add form did not send the expected request");
+    const youtubeHeading=page.locator("#content .source-tile h2")
+      .filter({hasText:"Демонстрационный канал"}).first();
+    try{
+      await youtubeHeading.waitFor({state:"visible",timeout:7000});
+    }catch(error){
+      const controls={
+        group:await page.locator("#source-platform").inputValue(),
+        topic:await page.locator("#source-topic").inputValue(),
+        sources:await page.locator("#content .source-tile h2").allTextContents(),
+        formStatus:await page.locator("#youtube-add-form .source-add-status").textContent(),
+        count:await page.locator("#result-count").textContent(),
+      };
+      throw new Error("YouTube source missing from dashboard after API add: "+
+        JSON.stringify(controls)+"; original: "+error.message);
+    }
     await page.locator("#public-source-kind").selectOption("github");
     await page.locator("#public-source-locator").fill("example/sample");
     await page.locator("#public-source-topic").selectOption("ai_software");
