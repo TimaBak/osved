@@ -24,6 +24,7 @@ const labels={
   briefing:["Русская сводка","Краткая картина событий на русском языке с подтверждённым статусом каждого материала."],
   notebook:["Мои заметки","Личный исследовательский архив: комментарии и прочитанные материалы."],
   saved:["Избранное","Сохранённые материалы из кабинета и Telegram."],
+  hidden:["Скрытые","Убранные из ленты карточки. Можно восстановить без изменения интересов."],
   sources:["Источники","Твой реестр наблюдения и включённые каналы."],
   media:["Медиалаб","Видео YouTube, расшифровки и смысловые выжимки."],
   studio:["Студия иллюстраций","Генеративные SVG-обложки. AI-рендер потребует подключения модели."],
@@ -154,6 +155,9 @@ function readingPanel(item,kind){
   });
   return panel;
 }
+function isHidden(kind,id){
+  return (state.data?.hidden||[]).some(x=>x.kind===kind&&x.id===id);
+}
 function card(item,kind){
   const type=kind==="radar"?"radar":item.kind||"news";
   const node=el("article","tile");
@@ -189,6 +193,23 @@ function card(item,kind){
     },"secondary-button");
     actions.append(save);
   }
+  const hidden=isHidden(type,item.id);
+  actions.append(action(hidden?"↩ Вернуть в ленту":"✕ Скрыть","close",async()=>{
+    const button=actions.lastElementChild;
+    button.disabled=true;
+    try{
+      await api("/api/hidden",{
+        method:"POST",body:JSON.stringify({kind:type,id:item.id,hidden:!hidden})
+      });
+      if(!Array.isArray(state.data.hidden))state.data.hidden=[];
+      state.data.hidden=state.data.hidden.filter(x=>!(x.kind===type&&x.id===item.id));
+      if(!hidden)state.data.hidden.push({kind:type,id:item.id});
+      render();
+    }catch(error){
+      button.disabled=false;
+      button.lastElementChild.textContent=friendly(error);
+    }
+  },"secondary-button"));
   node.append(actions);
   const reactions=el("details","reaction-details");
   const preview=el("summary","","🎯 Настроить рекомендации");
@@ -256,8 +277,14 @@ function render(){
   const all=Array.isArray(feed)?feed:[];
   const signals=Array.isArray(radar)?radar:[];
   const streams=Array.isArray(sources)?sources:[];
-  const news=all.filter(x=>x.kind==="news");
-  const video=all.filter(x=>x.kind==="video");
+  const visibleAll=all.filter(x=>!isHidden(x.kind,x.id));
+  const visibleSignals=signals.filter(x=>!isHidden("radar",x.id));
+  const hiddenItems=[
+    ...all.filter(x=>isHidden(x.kind,x.id)),
+    ...signals.filter(x=>isHidden("radar",x.id)),
+  ];
+  const news=visibleAll.filter(x=>x.kind==="news");
+  const video=visibleAll.filter(x=>x.kind==="video");
   const saved=all.filter(x=>x.saved);
   const root=$("#content"),stats=$("#metrics");
   root.replaceChildren();stats.replaceChildren();$("#section-tools").replaceChildren();
@@ -272,31 +299,31 @@ function render(){
   const note=(title,message)=>root.append(empty(title,message));
   const section=state.section;
   $("#result-count").textContent=String(
-    section==="feed"?news.length:section==="radar"?signals.length:section==="saved"?saved.length:section==="sources"?streams.length:section==="notebook"?(state.data.reading||[]).filter(x=>x.note||x.is_read).length:news.length+signals.length
+    section==="feed"?news.length:section==="radar"?visibleSignals.length:section==="hidden"?hiddenItems.length:section==="saved"?saved.length:section==="sources"?streams.length:section==="notebook"?(state.data.reading||[]).filter(x=>x.note||x.is_read).length:news.length+signals.length
   )+" материалов / объектов";
   if(section==="overview"){
     if(!news.length)note("Информационная картина","Проверенные публикации ещё не готовы. Ниже доступны сигналы из реальных источников. Это не готовые новости.");
     add(news.slice(0,5),"feed");
     add(video.slice(0,3),"feed");
-    if(signals.length){
+    if(visibleSignals.length){
       root.append(el("div","statusline","СИГНАЛЫ ИСТОЧНИКОВ · НЕПРОВЕРЕННЫЕ"));
-      add(signals.slice(0,9),"radar");
+      add(visibleSignals.slice(0,9),"radar");
     }
   }else if(section==="feed"){
     if(!news.length){
       note("Проверенных карточек пока нет","Лента формируется после проверки доказательств. Ниже реальные сообщения из источников, которые ещё не прошли проверку.");
-      if(signals.length){
+      if(visibleSignals.length){
         root.append(el("div","statusline","СИГНАЛЫ ИСТОЧНИКОВ · НЕПРОВЕРЕННЫЕ"));
-        add(signals.slice(0,12),"radar");
+        add(visibleSignals.slice(0,12),"radar");
       }
     }else add(news,"feed");
   }else if(section==="radar"){
-    if(!signals.length)note("Радар пока пуст","Новые сигналы появятся после следующего сбора источников.");
-    else add(signals,"radar");
+    if(!visibleSignals.length)note("Радар пока пуст","Новые сигналы появятся после следующего сбора источников.");
+    else add(visibleSignals,"radar");
   }else if(section==="briefing"){
     const russianNews=filter(news.filter(x=>x.language!=="original"));
-    const russianRadar=filter(signals.filter(x=>x.language!=="original"));
-    const foreign=filter([...news,...signals].filter(x=>x.language==="original"));
+    const russianRadar=filter(visibleSignals.filter(x=>x.language!=="original"));
+    const foreign=filter([...news,...visibleSignals].filter(x=>x.language==="original"));
     const panel=el("section","briefing-panel");
     panel.append(el("span","eyebrow","РУССКОЯЗЫЧНЫЙ ОБЗОР / ПРОВЕРЕННЫЕ ДАННЫЕ"));
     panel.append(el("h2","","Картина наблюдения"));
@@ -333,6 +360,9 @@ function render(){
       actions.append(action("Читать и изменить","note",()=>openArticle(item,entry.kind),"primary-button"));
       cardNode.append(actions);root.append(cardNode);
     }
+  }else if(section==="hidden"){
+    if(!hiddenItems.length)note("Нет скрытых материалов","Здесь появятся карточки, которые ты закрыл без оценки. Их всегда можно вернуть.");
+    for(const item of hiddenItems)add([item],item.kind==="radar"?"radar":"feed");
   }else if(section==="saved"){
     if(!saved.length)note("Сохранений пока нет","В ленте нажми «Сохранить» на нужном материале.");
     else add(saved,"feed");
