@@ -307,3 +307,21 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
 .youtube-channel-tracked{border-color:var(--border-strong)}
 .youtube-channel-tracked .youtube-channel-details strong{color:var(--text)}
 .youtube-channel-tracked button.youtube-import-added{color:var(--warning)}
+
+/* Connected accounts use the same constrained, independently collapsible layout. */
+.github-import-panel{min-width:0;width:100%;background:var(--surface);
+  border:1px solid var(--border-strong);border-radius:12px;padding:16px}
+.github-import-tabs{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0 16px}
+.github-import-tabs .github-tab-active{border-color:var(--primary)!important;
+  background:var(--primary-soft)!important;color:var(--text)!important}
+.github-import-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;margin-bottom:12px}
+.github-repo-description{font-size:12px!important;line-height:1.5;overflow-wrap:anywhere;
+  margin:0!important;color:var(--muted)}
+.oauth-subscriptions-panel[hidden]{display:none!important}
+@media(max-width:740px){
+  .github-import-panel{padding:12px}
+  .github-import-list{grid-template-columns:1fr}
+  .github-import-tabs{display:grid;grid-template-columns:1fr}
+  .github-import-tabs button{width:100%;justify-content:center}
+}
