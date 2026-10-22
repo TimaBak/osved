@@ -267,3 +267,38 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
 .batch-row span{flex:1;min-width:0;font-size:12px}
 .batch-row input{width:17px!important;height:17px;flex:0 0 17px;accent-color:var(--primary)}
 .batch-row:has(input:disabled){opacity:.62}
+
+/* Owner's YouTube subscription picker: stable full-width layout. */
+.oauth-provider-card{display:flex;flex-direction:column;gap:12px;min-width:0;
+  padding:20px;margin:16px 0;background:var(--surface-alt);
+  border:1px solid var(--border);border-radius:14px}
+.oauth-provider-heading{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px}
+.oauth-provider-heading strong{font-size:16px;letter-spacing:-.015em}
+.oauth-provider-card .oauth-provider-description{margin:0!important;color:var(--muted);
+  font-size:13px!important}
+.oauth-provider-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.oauth-provider-actions button{max-width:100%}
+.youtube-import-panel{min-width:0;width:100%;border:1px solid var(--border-strong);
+  border-radius:12px;background:var(--surface);padding:16px}
+.youtube-import-summary h3{font-size:16px;margin:0 0 6px}
+.youtube-import-status{color:var(--muted);margin:0 0 14px!important;
+  font-size:13px!important}
+.youtube-import-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+  margin-bottom:12px}
+.youtube-channel-card{min-width:0;display:flex;flex-direction:column;align-items:flex-start;
+  gap:12px;padding:14px;border:1px solid var(--border);border-radius:10px;
+  background:var(--surface-alt)}
+.youtube-channel-details{min-width:0;display:flex;flex-direction:column;gap:5px}
+.youtube-channel-details strong{overflow-wrap:anywhere;font-size:14px;line-height:1.45}
+.youtube-channel-details a{font-size:12px;overflow-wrap:anywhere}
+.youtube-channel-card button{max-width:100%;margin-top:auto}
+.youtube-channel-card button.youtube-import-added{color:var(--positive)}
+@media(max-width:740px){
+  .oauth-provider-card{padding:14px}
+  .oauth-provider-actions{display:grid;grid-template-columns:1fr}
+  .oauth-provider-actions button{width:100%;justify-content:center}
+  .youtube-import-panel{padding:12px}
+  .youtube-import-list{grid-template-columns:1fr}
+  .youtube-channel-card button{width:100%;justify-content:center}
+}
