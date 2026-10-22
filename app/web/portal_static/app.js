@@ -41,7 +41,9 @@ const errors={
   uncertain:"Результат платного запроса не подтверждён. Повтор отключён, чтобы избежать двойных списаний.",
   insufficient_context:"Для качественной выжимки недостаточно контекста.",
   provider_blocked:"Поставщик субтитров заблокировал запрос.",
-  youtube_direct_channel_required:"Для бесплатного подключения нужна ссылка YouTube формата /channel/UC… — без платного поиска ID.",
+  youtube_direct_channel_required:"Для бесплатного подключения нужна ссылка YouTube формата /channel/UC….",
+  youtube_resolution_consent_required:"Чтобы добавить @ник, разреши одно платное распознавание канала.",
+  youtube_resolver_unconfigured:"Для @ника пока не настроен Monid. Ссылка /channel/UC… добавляется бесплатно.",
   invalid_youtube_channel:"Это не ссылка на публичный YouTube-канал.",
   youtube_channel_unavailable:"Не удалось проверить публичную ленту канала.",
   unavailable:"Субтитры этого ролика недоступны.",
@@ -556,18 +558,22 @@ function render(){
     addPanel.append(el("h2","","Добавить собственный источник"));
     addPanel.append(el("p","","Подключи публичный YouTube-канал бесплатно по его прямой ссылке. ОСВЕД сохранит подписку в общей базе сайта и Telegram. Новые ролики поступают в радар при работе расписания сборщика."));
     const addForm=el("form");addForm.id="youtube-add-form";
-    const label=el("label","","Прямая ссылка на канал YouTube (channel/UC…)");label.htmlFor="youtube-channel-url";
-    const input=el("input");input.type="url";input.id="youtube-channel-url";input.required=true;
-    input.autocomplete="url";input.placeholder="https://www.youtube.com/channel/UC…";
+    const label=el("label","","YouTube: @ник или обычная ссылка на канал");label.htmlFor="youtube-channel-url";
+    const input=el("input");input.type="text";input.id="youtube-channel-url";input.required=true;
+    input.autocomplete="off";input.placeholder="@канал или https://youtube.com/channel/UC…";
     input.maxLength=2048;
+    const resolveLabel=el("label","reader-check");
+    const resolveInput=el("input");resolveInput.type="checkbox";resolveInput.id="youtube-resolve-consent";
+    resolveLabel.append(resolveInput,el("span","",
+      "Разрешаю один запрос Monid для определения @ника (оценка $0.0015). Для прямой /channel/UC… ссылки он не нужен."));
     const submit=el("button","primary-button","Добавить канал");submit.type="submit";
     const addStatus=el("p","source-add-status");addStatus.setAttribute("role","status");
-    addForm.append(label,input,submit,addStatus);
+    addForm.append(label,input,resolveLabel,submit,addStatus);
     addForm.addEventListener("submit",async event=>{
       event.preventDefault();submit.disabled=true;addStatus.textContent="Проверяю публичную ленту…";
       try{
         const outcome=await api("/api/youtube/channels/add",{
-          method:"POST",body:JSON.stringify({url:input.value.trim()})
+          method:"POST",body:JSON.stringify({url:input.value.trim(),allow_paid_resolution:resolveInput.checked})
         });
         addStatus.textContent=outcome.existing?
           "Канал уже подключён: "+outcome.title:
