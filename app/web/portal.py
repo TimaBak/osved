@@ -782,7 +782,8 @@ async def youtube_subscriptions_preview(request: web.Request) -> web.Response:
     from app.telegram_bot.bot import configured_owner_id
     from app.web.oauth_vault import connected_accounts, read_tokens
     from app.web.youtube_subscriptions import (
-        YoutubeSubscriptionsError, list_subscriptions,
+        YoutubeSubscriptionsError,
+        list_subscriptions,
     )
 
     state: PortalState = request.app[STATE]
