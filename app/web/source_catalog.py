@@ -58,6 +58,14 @@ def public_capabilities(settings) -> dict:
         None
     )
     return {
+        "models": {
+            "target_provider": "codexsale",
+            "target_merged": False,
+            "target_status": "integration_in_review",
+            "current_backend": "openrouter",
+            "current_backend_configured": ai,
+            "openrouter_role": "legacy_fallback",
+        },
         "video": {
             "ready": reason is None,
             "reason": reason,

@@ -50,6 +50,8 @@ const { chromium } = require("playwright");
     let interestAction = null;
     let addedChannel = false;
     let addedPublicSource = false;
+    let hiddenNews = false;
+    let bulkCalls = 0;
     await page.route("**/api/overview", route => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -59,6 +61,7 @@ const { chromium } = require("playwright");
             summary: "Редакционный материал", saved: false,
             url: "https://example.org/article" },
         ] : [],
+        hidden: hiddenNews ? [{kind:"news",id:1,hidden_at:"2026-10-22T01:00:00Z"}] : [],
         radar: [
           { id: 2, title: "Предварительный сигнал",
             source: "Пример источника", verified: false,
@@ -143,10 +146,19 @@ const { chromium } = require("playwright");
       status: 409,contentType:"application/json",
       body: '{"error":"ai_provider_unconfigured"}',
     }));
+    await page.route("**/api/hidden", async route=>{
+      const body=route.request().postDataJSON();
+      assert.equal(body.kind,"news");
+      assert.equal(body.id,1);
+      hiddenNews=body.hidden;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:JSON.stringify({ok:true,...body})});
+    });
     await page.route("**/api/public-sources/add", async route=>{
       const body=route.request().postDataJSON();
       assert.equal(body.kind,"github");
       assert.equal(body.locator,"example/sample");
+      bulkCalls++;
       addedPublicSource=true;
       await route.fulfill({status:200,contentType:"application/json",
         body:JSON.stringify({ok:true,id:"user_github_sample",
@@ -226,6 +238,25 @@ const { chromium } = require("playwright");
     await page.locator("#public-source-add-form button[type=submit]").click();
     await page.getByText("GitHub — example/sample",{exact:true}).waitFor({state:"visible"});
     assert.equal(addedPublicSource,true);
+    await page.locator("#bulk-import-text").fill(
+      "https://github.com/example/sample\nhttps://vc.ru/");
+    await page.locator("#bulk-import-form button").filter({hasText:"Предпросмотр"}).click();
+    await page.getByText("Подключение этой площадки ещё не реализовано",
+      {exact:false}).waitFor({state:"visible"});
+    await page.locator("#bulk-import-form button").filter({hasText:"Подключить выбранные"}).click();
+    await page.getByText("Добавлено или уже подключено:",{exact:false})
+      .waitFor({state:"visible"});
+    assert.equal(bulkCalls,2);
+    await page.locator('[data-section="feed"]').click();
+    await page.getByText("Проверенный пример").waitFor({state:"visible"});
+    await page.locator("#content .tile .tile-actions").first()
+      .getByRole("button",{name:"✕ Скрыть"}).click();
+    assert.equal(hiddenNews,true);
+    await page.locator('[data-section="hidden"]').click();
+    await page.getByText("Проверенный пример").waitFor({state:"visible"});
+    await page.locator("#content .tile .tile-actions").first()
+      .getByRole("button",{name:"↩ Вернуть в ленту"}).click();
+    assert.equal(hiddenNews,false);
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
     await page.locator("#theme-toggle").click();

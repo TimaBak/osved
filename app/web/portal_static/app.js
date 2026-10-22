@@ -24,6 +24,7 @@ const labels={
   briefing:["Русская сводка","Краткая картина событий на русском языке с подтверждённым статусом каждого материала."],
   notebook:["Мои заметки","Личный исследовательский архив: комментарии и прочитанные материалы."],
   saved:["Избранное","Сохранённые материалы из кабинета и Telegram."],
+  hidden:["Скрытые","Убранные из ленты карточки. Можно восстановить без изменения интересов."],
   sources:["Источники","Твой реестр наблюдения и включённые каналы."],
   media:["Медиалаб","Видео YouTube, расшифровки и смысловые выжимки."],
   studio:["Студия иллюстраций","Генеративные SVG-обложки. AI-рендер потребует подключения модели."],
@@ -40,7 +41,9 @@ const errors={
   uncertain:"Результат платного запроса не подтверждён. Повтор отключён, чтобы избежать двойных списаний.",
   insufficient_context:"Для качественной выжимки недостаточно контекста.",
   provider_blocked:"Поставщик субтитров заблокировал запрос.",
-  youtube_direct_channel_required:"Для бесплатного подключения нужна ссылка YouTube формата /channel/UC… — без платного поиска ID.",
+  youtube_direct_channel_required:"Для бесплатного подключения нужна ссылка YouTube формата /channel/UC….",
+  youtube_resolution_consent_required:"Чтобы добавить @ник, разреши одно платное распознавание канала.",
+  youtube_resolver_unconfigured:"Для @ника пока не настроен Monid. Ссылка /channel/UC… добавляется бесплатно.",
   invalid_youtube_channel:"Это не ссылка на публичный YouTube-канал.",
   youtube_channel_unavailable:"Не удалось проверить публичную ленту канала.",
   unavailable:"Субтитры этого ролика недоступны.",
@@ -154,6 +157,9 @@ function readingPanel(item,kind){
   });
   return panel;
 }
+function isHidden(kind,id){
+  return (state.data?.hidden||[]).some(x=>x.kind===kind&&x.id===id);
+}
 function card(item,kind){
   const type=kind==="radar"?"radar":item.kind||"news";
   const node=el("article","tile");
@@ -189,6 +195,23 @@ function card(item,kind){
     },"secondary-button");
     actions.append(save);
   }
+  const hidden=isHidden(type,item.id);
+  actions.append(action(hidden?"↩ Вернуть в ленту":"✕ Скрыть","close",async()=>{
+    const button=actions.lastElementChild;
+    button.disabled=true;
+    try{
+      await api("/api/hidden",{
+        method:"POST",body:JSON.stringify({kind:type,id:item.id,hidden:!hidden})
+      });
+      if(!Array.isArray(state.data.hidden))state.data.hidden=[];
+      state.data.hidden=state.data.hidden.filter(x=>!(x.kind===type&&x.id===item.id));
+      if(!hidden)state.data.hidden.push({kind:type,id:item.id});
+      render();
+    }catch(error){
+      button.disabled=false;
+      button.lastElementChild.textContent=friendly(error);
+    }
+  },"secondary-button"));
   node.append(actions);
   const reactions=el("details","reaction-details");
   const preview=el("summary","","🎯 Настроить рекомендации");
@@ -250,14 +273,141 @@ async function changePriority(topic,delta){
     $("#section-tools").append(message);
   }
 }
+function parseSourceLine(raw){
+  let line=String(raw||"").replace(/^\uFEFF/,"").trim();
+  if(!line||line.startsWith("#")||/^(url|link|ссылка)$/i.test(line))return null;
+  if(line.startsWith('"')){
+    const m=line.match(/^"([^"]+)"(?:[,;].*)?$/);
+    if(m)line=m[1];
+  }else line=line.split(/[,;]/,1)[0].trim();
+  line=line.trim();
+  if(line.length>400)return {raw,reason:"Слишком длинная ссылка"};
+  if(/^r\/[a-z0-9_]{2,21}$/i.test(line))
+    return {raw,kind:"reddit",locator:line};
+  if(/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(line)&&!line.startsWith("r/"))
+    return {raw,kind:"github",locator:line};
+  let url;
+  try{url=new URL(line);}catch(_){return {raw,reason:"Неизвестный формат"};}
+  if(url.protocol!=="https:"||url.username||url.password||url.port||url.hash||url.search)
+    return {raw,reason:"Нужна обычная публичная HTTPS-ссылка без параметров"};
+  const host=url.hostname.toLowerCase();
+  const path=url.pathname.replace(/^\/|\/$/g,"");
+  if(["github.com","www.github.com"].includes(host)){
+    if(/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(path)&&!path.includes(".."))
+      return {raw,kind:"github",locator:line};
+    return {raw,reason:"Нужна ссылка на корень репозитория"};
+  }
+  if(["reddit.com","www.reddit.com"].includes(host)){
+    if(/^r\/[a-z0-9_]{2,21}$/i.test(path))
+      return {raw,kind:"reddit",locator:line};
+    return {raw,reason:"Нужна ссылка на сообщество r/…"};
+  }
+  if(["youtube.com","www.youtube.com","m.youtube.com"].includes(host)){
+    if(/^channel\/UC[a-z0-9_-]{22}$/i.test(path))
+      return {raw,kind:"youtube",locator:line};
+    return {raw,reason:"Для пакета YouTube пока нужен адрес /channel/UC…"};
+  }
+  return {raw,reason:"Подключение этой площадки ещё не реализовано"};
+}
+function sourceImportPanel(){
+  const panel=el("section","panel source-add-panel batch-panel");
+  panel.append(el("h2","","Импорт списка ссылок"));
+  panel.append(el("p","","Один канал, репозиторий или сообщество на строку. TXT или CSV (первый столбец — ссылка). До 25 ссылок за пакет. Перед добавлением покажем, какие ссылки поддерживаются; вход в личные аккаунты здесь не требуется."));
+  const form=el("form");form.id="bulk-import-form";
+  const fileLabel=el("label","","Загрузить файл TXT / CSV");
+  const file=el("input");file.id="bulk-import-file";file.type="file";file.accept=".txt,.csv,text/plain,text/csv";
+  fileLabel.append(file);
+  const textLabel=el("label","","Или вставить ссылки списком");textLabel.htmlFor="bulk-import-text";
+  const area=el("textarea");area.id="bulk-import-text";area.rows=5;area.maxLength=65536;
+  area.placeholder="https://github.com/microsoft/vscode\nr/Python\nhttps://www.youtube.com/channel/UC…";
+  const topicLabel=el("label","","Категория по умолчанию");topicLabel.htmlFor="bulk-import-topic";
+  const topic=el("select","source-filter");topic.id="bulk-import-topic";
+  const unassigned=el("option","","Без категории");unassigned.value="";topic.append(unassigned);
+  for(const entry of (state.data?.personalization?.topics||[])){
+    const opt=el("option","",entry.title);opt.value=entry.id;topic.append(opt);
+  }
+  const preview=el("button","secondary-button","Предпросмотр");preview.type="button";
+  const commit=el("button","primary-button","Подключить выбранные");commit.type="button";commit.disabled=true;
+  const message=el("p","source-add-status");message.id="bulk-import-status";message.setAttribute("role","status");
+  const results=el("div","batch-preview");results.id="bulk-import-preview";
+  let parsed=[];
+  file.addEventListener("change",async()=>{
+    if(!file.files?.length)return;
+    const selected=file.files[0];
+    if(selected.size>65536||!/.\.(txt|csv)$/i.test(selected.name)){
+      message.textContent="Поддерживается TXT/CSV до 64 КБ.";
+      return;
+    }
+    area.value=await selected.text();
+    message.textContent="Файл загружен локально. Нажми «Предпросмотр».";
+  });
+  preview.addEventListener("click",()=>{
+    parsed=[];results.replaceChildren();commit.disabled=true;
+    const rows=area.value.split(/\r?\n/).map(parseSourceLine).filter(Boolean);
+    if(rows.length>25){message.textContent="В одном пакете не больше 25 строк. Раздели файл.";return;}
+    const used=new Set();
+    for(const row of rows){
+      const key=(row.kind||"")+":"+(row.locator||"").toLowerCase();
+      if(row.kind&&used.has(key))continue;
+      if(row.kind)used.add(key);
+      parsed.push(row);
+      const label=el("label","batch-row");
+      const checkbox=el("input");checkbox.type="checkbox";checkbox.checked=Boolean(row.kind);
+      checkbox.disabled=!row.kind;row.checkbox=checkbox;
+      const detail=el("span","",row.raw+" · "+(row.kind||row.reason));
+      label.append(checkbox,detail);results.append(label);
+    }
+    const total=parsed.filter(x=>x.kind).length;
+    message.textContent="Распознано: "+total+" · Неподдерживаемых: "+(parsed.length-total)+". Можно снять галочки перед импортом.";
+    commit.disabled=!total;
+  });
+  commit.addEventListener("click",async()=>{
+    const selected=parsed.filter(x=>x.kind&&x.checkbox.checked);
+    if(!selected.length){message.textContent="Выбери хотя бы одну ссылку.";return;}
+    commit.disabled=true;preview.disabled=true;
+    let ok=0;const errors=[];
+    for(const item of selected){
+      message.textContent="Подключаю "+(ok+errors.length+1)+" из "+selected.length+"…";
+      try{
+        if(item.kind==="youtube"){
+          await api("/api/youtube/channels/add",{
+            method:"POST",body:JSON.stringify({url:item.locator})
+          });
+        }else{
+          await api("/api/public-sources/add",{
+            method:"POST",body:JSON.stringify({
+              kind:item.kind,locator:item.locator,topic:topic.value,
+            })
+          });
+        }
+        ok++;
+      }catch(e){errors.push(item.raw+": "+friendly(e));}
+    }
+    try{
+      state.data=await api("/api/overview");render();
+      const status=$("#bulk-import-status");
+      if(status)status.textContent="Добавлено или уже подключено: "+ok+
+        " · Ошибок: "+errors.length+(errors.length?" · "+errors.slice(0,2).join(" | "):"");
+    }catch(e){message.textContent="Изменения сохранены, но обновление списка не удалось: "+friendly(e);}
+  });
+  form.append(fileLabel,textLabel,area,topicLabel,topic,preview,commit,message,results);
+  panel.append(form);
+  return panel;
+}
 function render(){
   if(!state.data)return;
   const {feed,radar,sources,health}=state.data;
   const all=Array.isArray(feed)?feed:[];
   const signals=Array.isArray(radar)?radar:[];
   const streams=Array.isArray(sources)?sources:[];
-  const news=all.filter(x=>x.kind==="news");
-  const video=all.filter(x=>x.kind==="video");
+  const visibleAll=all.filter(x=>!isHidden(x.kind,x.id));
+  const visibleSignals=signals.filter(x=>!isHidden("radar",x.id));
+  const hiddenItems=[
+    ...all.filter(x=>isHidden(x.kind,x.id)),
+    ...signals.filter(x=>isHidden("radar",x.id)),
+  ];
+  const news=visibleAll.filter(x=>x.kind==="news");
+  const video=visibleAll.filter(x=>x.kind==="video");
   const saved=all.filter(x=>x.saved);
   const root=$("#content"),stats=$("#metrics");
   root.replaceChildren();stats.replaceChildren();$("#section-tools").replaceChildren();
@@ -272,31 +422,31 @@ function render(){
   const note=(title,message)=>root.append(empty(title,message));
   const section=state.section;
   $("#result-count").textContent=String(
-    section==="feed"?news.length:section==="radar"?signals.length:section==="saved"?saved.length:section==="sources"?streams.length:section==="notebook"?(state.data.reading||[]).filter(x=>x.note||x.is_read).length:news.length+signals.length
+    section==="feed"?news.length:section==="radar"?visibleSignals.length:section==="hidden"?hiddenItems.length:section==="saved"?saved.length:section==="sources"?streams.length:section==="notebook"?(state.data.reading||[]).filter(x=>x.note||x.is_read).length:news.length+signals.length
   )+" материалов / объектов";
   if(section==="overview"){
     if(!news.length)note("Информационная картина","Проверенные публикации ещё не готовы. Ниже доступны сигналы из реальных источников. Это не готовые новости.");
     add(news.slice(0,5),"feed");
     add(video.slice(0,3),"feed");
-    if(signals.length){
+    if(visibleSignals.length){
       root.append(el("div","statusline","СИГНАЛЫ ИСТОЧНИКОВ · НЕПРОВЕРЕННЫЕ"));
-      add(signals.slice(0,9),"radar");
+      add(visibleSignals.slice(0,9),"radar");
     }
   }else if(section==="feed"){
     if(!news.length){
       note("Проверенных карточек пока нет","Лента формируется после проверки доказательств. Ниже реальные сообщения из источников, которые ещё не прошли проверку.");
-      if(signals.length){
+      if(visibleSignals.length){
         root.append(el("div","statusline","СИГНАЛЫ ИСТОЧНИКОВ · НЕПРОВЕРЕННЫЕ"));
-        add(signals.slice(0,12),"radar");
+        add(visibleSignals.slice(0,12),"radar");
       }
     }else add(news,"feed");
   }else if(section==="radar"){
-    if(!signals.length)note("Радар пока пуст","Новые сигналы появятся после следующего сбора источников.");
-    else add(signals,"radar");
+    if(!visibleSignals.length)note("Радар пока пуст","Новые сигналы появятся после следующего сбора источников.");
+    else add(visibleSignals,"radar");
   }else if(section==="briefing"){
     const russianNews=filter(news.filter(x=>x.language!=="original"));
-    const russianRadar=filter(signals.filter(x=>x.language!=="original"));
-    const foreign=filter([...news,...signals].filter(x=>x.language==="original"));
+    const russianRadar=filter(visibleSignals.filter(x=>x.language!=="original"));
+    const foreign=filter([...news,...visibleSignals].filter(x=>x.language==="original"));
     const panel=el("section","briefing-panel");
     panel.append(el("span","eyebrow","РУССКОЯЗЫЧНЫЙ ОБЗОР / ПРОВЕРЕННЫЕ ДАННЫЕ"));
     panel.append(el("h2","","Картина наблюдения"));
@@ -333,6 +483,9 @@ function render(){
       actions.append(action("Читать и изменить","note",()=>openArticle(item,entry.kind),"primary-button"));
       cardNode.append(actions);root.append(cardNode);
     }
+  }else if(section==="hidden"){
+    if(!hiddenItems.length)note("Нет скрытых материалов","Здесь появятся карточки, которые ты закрыл без оценки. Их всегда можно вернуть.");
+    for(const item of hiddenItems)add([item],item.kind==="radar"?"radar":"feed");
   }else if(section==="saved"){
     if(!saved.length)note("Сохранений пока нет","В ленте нажми «Сохранить» на нужном материале.");
     else add(saved,"feed");
@@ -398,25 +551,29 @@ function render(){
     header.append(meta);
     const access=el("div","connection-guide");
     access.append(el("strong","","Личные подписки из аккаунтов"));
-    access.append(el("p","","Импорт через OAuth или собственный файл появится после безопасного подключения каждого провайдера. Сейчас можно управлять уже настроенными публичными источниками. Пароли и файлы браузерной сессии не требуются."));
+    access.append(el("p","","TXT/CSV и список публичных ссылок можно загрузить ниже. Личные подписки из подключённых аккаунтов — отдельный этап OAuth с правом отзыва доступа. Пароли и браузерные сессии не требуются."));
     header.append(access);
     $("#section-tools").append(header);
     const addPanel=el("section","panel source-add-panel");
     addPanel.append(el("h2","","Добавить собственный источник"));
     addPanel.append(el("p","","Подключи публичный YouTube-канал бесплатно по его прямой ссылке. ОСВЕД сохранит подписку в общей базе сайта и Telegram. Новые ролики поступают в радар при работе расписания сборщика."));
     const addForm=el("form");addForm.id="youtube-add-form";
-    const label=el("label","","Прямая ссылка на канал YouTube (channel/UC…)");label.htmlFor="youtube-channel-url";
-    const input=el("input");input.type="url";input.id="youtube-channel-url";input.required=true;
-    input.autocomplete="url";input.placeholder="https://www.youtube.com/channel/UC…";
+    const label=el("label","","YouTube: @ник или обычная ссылка на канал");label.htmlFor="youtube-channel-url";
+    const input=el("input");input.type="text";input.id="youtube-channel-url";input.required=true;
+    input.autocomplete="off";input.placeholder="@канал или https://youtube.com/channel/UC…";
     input.maxLength=2048;
+    const resolveLabel=el("label","reader-check");
+    const resolveInput=el("input");resolveInput.type="checkbox";resolveInput.id="youtube-resolve-consent";
+    resolveLabel.append(resolveInput,el("span","",
+      "Разрешаю один запрос Monid для определения @ника (оценка $0.0015). Для прямой /channel/UC… ссылки он не нужен."));
     const submit=el("button","primary-button","Добавить канал");submit.type="submit";
     const addStatus=el("p","source-add-status");addStatus.setAttribute("role","status");
-    addForm.append(label,input,submit,addStatus);
+    addForm.append(label,input,resolveLabel,submit,addStatus);
     addForm.addEventListener("submit",async event=>{
       event.preventDefault();submit.disabled=true;addStatus.textContent="Проверяю публичную ленту…";
       try{
         const outcome=await api("/api/youtube/channels/add",{
-          method:"POST",body:JSON.stringify({url:input.value.trim()})
+          method:"POST",body:JSON.stringify({url:input.value.trim(),allow_paid_resolution:resolveInput.checked})
         });
         addStatus.textContent=outcome.existing?
           "Канал уже подключён: "+outcome.title:
@@ -485,6 +642,7 @@ function render(){
     publicPanel.append(el("p","caption source-account-help",
       "GitHub читает только публичные релизы; Reddit — открытые сообщения сообщества. Чтобы импортировать личные подписки из X/Reddit/YouTube, понадобится отдельный официальный OAuth."));
     $("#section-tools").append(publicPanel);
+    $("#section-tools").append(sourceImportPanel());
     const chosen=filter(streams).filter(s=>
       (state.sourceGroup==="all"||s.category===state.sourceGroup)&&
       (state.sourceTopic==="all"||(Array.isArray(s.topics)&&s.topics.includes(state.sourceTopic)))
@@ -585,6 +743,21 @@ function render(){
       }
       panel.append(details);
     }
+    const provider=el("section","connection-guide");
+    provider.append(el("strong","","AI-провайдер и выбор моделей"));
+    provider.append(el("p","",
+      "Основной выбранный провайдер — Codex Sale. Его клиент и меню моделей находятся в незавершённом PR #1: в опубликованной версии интеграция ещё не включена. Сейчас YouTube-пайплайн технически зависит от OpenRouter и Monid. Не вводи ключи сюда — для них нужен защищённый серверный канал."));
+    panel.append(provider);
+    const accounts=el("section","panel account-status");
+    accounts.append(el("h2","","Мои подключённые аккаунты"));
+    accounts.append(el("p","","Личный вход в ОСВЕД через Telegram — отдельно от чтения ваших подписок. Для каждого внешнего аккаунта требуется официальное разрешение на чтение и кнопка отзыва доступа. Подключение ещё не реализовано: отображаем реальный статус."));
+    for(const service of ["YouTube","Telegram (личные подписки)","X","Reddit","GitHub"]){
+      const row=el("div","capability-row");
+      row.append(el("strong","",service),pill("НЕ ПОДКЛЮЧЁН","tag off"));
+      row.append(el("span","","Авторизация и импорт личных подписок появятся после OAuth/API-проверки. Сейчас доступны публичные ссылки через «Источники»."));
+      accounts.append(row);
+    }
+    $("#section-tools").append(accounts);
     panel.append(el("p","","Источник данных: текущая SQLite ОСВЕД. Оформление — светлая бело-синяя и тёмная серо-синяя темы."));
     const themeButton=action("Сменить тему","moon",()=>{
       theme(document.documentElement.dataset.theme==="dark"?"light":"dark");
