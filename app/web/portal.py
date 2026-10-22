@@ -22,6 +22,7 @@ from aiohttp import web
 from app.config import Settings
 from app.db.repository import Repository
 from app.ops.feed_health import feed_health
+from app.video.channels import ChannelError, ChannelService, change_channel, channel_url
 from app.video.reports import ReportError
 from app.video.transcripts import youtube_video_id
 from app.web.content import plain_text, public_url, safe_html
@@ -522,6 +523,74 @@ async def bookmark(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "saved": saved})
 
 
+async def add_youtube_source(request: web.Request) -> web.Response:
+    """Owner adds a validated public channel, without authorizing paid resolution."""
+    from app.telegram_bot.bot import configured_owner_id
+
+    state: PortalState = request.app[STATE]
+    try:
+        data = await request.json()
+        url = data["url"]
+        if not isinstance(url, str) or len(url) > 2048:
+            return error("invalid_youtube_channel")
+        try:
+            normalized = channel_url(url)
+        except ChannelError:
+            return error("invalid_youtube_channel")
+        # Handles require Monid resolution and may incur charges. The web
+        # catalog deliberately implements the guaranteed free direct-ID path.
+        if "/channel/UC" not in normalized:
+            return error("youtube_direct_channel_required")
+        owner_id = configured_owner_id(state.settings, state.repository)
+        if not owner_id:
+            return error("authentication_unconfigured", 503)
+        result = await asyncio.to_thread(
+            ChannelService(state.settings, state.repository).add,
+            normalized, owner_id,
+        )
+    except ChannelError as exc:
+        return web.json_response({
+            "error": "youtube_channel_unavailable", "detail": str(exc)[:180],
+        }, status=422)
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_youtube_channel")
+    return web.json_response({
+        "ok": True, "source_id": result["source_id"],
+        "title": result["title"], "existing": bool(result["existing"]),
+    })
+
+
+async def remove_youtube_source(request: web.Request) -> web.Response:
+    """Soft-delete an owner-added channel without touching collected history."""
+    from app.telegram_bot.bot import configured_owner_id
+
+    state: PortalState = request.app[STATE]
+    try:
+        data = await request.json()
+        source_id = data["id"]
+        if not isinstance(source_id, str) or not source_id.startswith("youtube_user_"):
+            return error("not_owner_added_source")
+        owner_id = configured_owner_id(state.settings, state.repository)
+        if not owner_id:
+            return error("authentication_unconfigured", 503)
+        with state.repository.connection() as db:
+            found = db.execute(
+                "SELECT 1 FROM youtube_channels WHERE source_id=? AND removed_at IS NULL",
+                (source_id,),
+            ).fetchone()
+        if not found:
+            return error("not_found", 404)
+        await asyncio.to_thread(
+            change_channel, state.settings, state.repository,
+            source_id, "remove", owner_id,
+        )
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_source")
+    except ChannelError:
+        return error("not_found", 404)
+    return web.json_response({"ok": True, "id": source_id, "removed": True})
+
+
 async def source_update(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     try:
@@ -595,6 +664,8 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/source", source_update)
+    app.router.add_post("/api/youtube/channels/add", add_youtube_source)
+    app.router.add_post("/api/youtube/channels/remove", remove_youtube_source)
     app.router.add_get("/", static)
     app.router.add_get("/{filename}", static)
     app.on_startup.append(startup)

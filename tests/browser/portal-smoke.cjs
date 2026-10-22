@@ -48,6 +48,7 @@ const { chromium } = require("playwright");
     let editorialReady = true;
     let interestPriority = 0;
     let interestAction = null;
+    let addedChannel = false;
     await page.route("**/api/overview", route => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -70,7 +71,11 @@ const { chromium } = require("playwright");
           { id:"x:example", name:"Автор X", kind:"x",
             category:"Социальные сети", platform:"X",
             topics:["research"],status:"paused",enabled:false },
-        ],
+        ].concat(addedChannel ? [{
+          id:"youtube_user_sample",name:"YouTube — Демонстрационный канал",
+          kind:"youtube",category:"Видео",platform:"YouTube",topics:[],
+          enabled:true,status:"ready",
+        }] : []),
         health: { status: "ok", news_24h: 1, last_news_at: null },
         personalization: {
           algorithm:"heuristic_v1", feedback_count:interestAction?1:0,
@@ -132,6 +137,17 @@ const { chromium } = require("playwright");
       status: 409,contentType:"application/json",
       body: '{"error":"ai_provider_unconfigured"}',
     }));
+    await page.route("**/api/youtube/channels/add", async route=>{
+      addedChannel=true;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:JSON.stringify({ok:true,title:"Демонстрационный канал",
+          source_id:"youtube_user_sample",existing:false})});
+    });
+    await page.route("**/api/youtube/channels/remove", async route=>{
+      addedChannel=false;
+      await route.fulfill({status:200,contentType:"application/json",
+        body:'{"ok":true,"removed":true}'});
+    });
     await page.route("**/api/source", route => route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({ id: "rss:example.org", enabled: false }),
@@ -150,6 +166,12 @@ const { chromium } = require("playwright");
     await page.reload({waitUntil:"domcontentloaded"});
     await page.locator("#shell").waitFor({state:"visible",timeout:7000});
     assert.equal(await page.locator("#auth").isVisible(),false);
+    await page.evaluate(()=>window.scrollTo({top:750,behavior:"instant"}));
+    const sticky=await page.evaluate(()=>{
+      const side=document.querySelector(".sidebar").getBoundingClientRect();
+      return {top:side.top,height:side.height};
+    });
+    assert.equal(sticky.top,0,"Mobile OSVED navigation should remain sticky");
     await page.locator('[data-section="interests"]').click();
     await page.getByText("Управление информационным потоком").waitFor({state:"visible"});
     await page.locator(".topic-tile").first().locator("button").last().click();
@@ -170,6 +192,14 @@ const { chromium } = require("playwright");
     await page.locator("#source-topic").selectOption("ai");
     await page.getByRole("button", { name: "Приостановить" }).click();
     await page.getByText("ПАУЗА").waitFor({state:"visible"});
+    await page.locator("#source-platform").selectOption("all");
+    await page.locator("#source-topic").selectOption("all");
+    await page.locator("#youtube-channel-url").fill(
+      "https://www.youtube.com/channel/UCaaaaaaaaaaaaaaaaaaaaaa");
+    await page.locator("#youtube-add-form button[type=submit]").click();
+    await page.getByText("Демонстрационный канал",{exact:false}).first()
+      .waitFor({state:"visible"});
+    assert.equal(addedChannel,true);
     await page.locator('[data-section="feed"]').click();
     await page.getByText("Проверенный пример").waitFor({state:"visible"});
     await page.locator("#theme-toggle").click();

@@ -40,6 +40,9 @@ const errors={
   uncertain:"Результат платного запроса не подтверждён. Повтор отключён, чтобы избежать двойных списаний.",
   insufficient_context:"Для качественной выжимки недостаточно контекста.",
   provider_blocked:"Поставщик субтитров заблокировал запрос.",
+  youtube_direct_channel_required:"Для бесплатного подключения нужна ссылка YouTube формата /channel/UC… — без платного поиска ID.",
+  invalid_youtube_channel:"Это не ссылка на публичный YouTube-канал.",
+  youtube_channel_unavailable:"Не удалось проверить публичную ленту канала.",
   unavailable:"Субтитры этого ролика недоступны.",
   disabled:"Провайдер для генерации не подключён.",
   processing:"Обработка уже идёт.",
@@ -398,6 +401,43 @@ function render(){
     access.append(el("p","","Импорт через OAuth или собственный файл появится после безопасного подключения каждого провайдера. Сейчас можно управлять уже настроенными публичными источниками. Пароли и файлы браузерной сессии не требуются."));
     header.append(access);
     $("#section-tools").append(header);
+    const addPanel=el("section","panel source-add-panel");
+    addPanel.append(el("h2","","Добавить собственный источник"));
+    addPanel.append(el("p","","Подключи публичный YouTube-канал бесплатно по его прямой ссылке. ОСВЕД сохранит подписку в общей базе сайта и Telegram. Новые ролики поступают в радар при работе расписания сборщика."));
+    const addForm=el("form");addForm.id="youtube-add-form";
+    const label=el("label","","Прямая ссылка на канал YouTube (channel/UC…)");label.htmlFor="youtube-channel-url";
+    const input=el("input");input.type="url";input.id="youtube-channel-url";input.required=true;
+    input.autocomplete="url";input.placeholder="https://www.youtube.com/channel/UC…";
+    input.maxLength=2048;
+    const submit=el("button","primary-button","Добавить канал");submit.type="submit";
+    const addStatus=el("p","source-add-status");addStatus.setAttribute("role","status");
+    addForm.append(label,input,submit,addStatus);
+    addForm.addEventListener("submit",async event=>{
+      event.preventDefault();submit.disabled=true;addStatus.textContent="Проверяю публичную ленту…";
+      try{
+        const outcome=await api("/api/youtube/channels/add",{
+          method:"POST",body:JSON.stringify({url:input.value.trim()})
+        });
+        addStatus.textContent=outcome.existing?
+          "Канал уже подключён: "+outcome.title:
+          "Канал добавлен: "+outcome.title;
+        input.value="";
+        const fresh=await api("/api/overview");state.data=fresh;
+        render();
+        const status=$("#youtube-add-form .source-add-status");
+        if(status)status.textContent=outcome.existing?
+          "Канал уже был в реестре.":"Готово! Канал сохранён и появится в реестре.";
+      }catch(error){
+        addStatus.textContent=friendly(error);
+        if(error.payload?.detail)addStatus.textContent+=" "+error.payload.detail;
+        submit.disabled=false;
+      }
+    });
+    addPanel.append(addForm);
+    const hint=el("p","caption source-account-help",
+      "Личный аккаунт X, Reddit или YouTube пока нельзя авторизовать здесь. Для чтения ваших подписок нужен официальный OAuth, отдельное согласие и возможность отозвать доступ. Это следующий этап, а не работающая кнопка.");
+    addPanel.append(hint);
+    $("#section-tools").append(addPanel);
     const chosen=filter(streams).filter(s=>
       (state.sourceGroup==="all"||s.category===state.sourceGroup)&&
       (state.sourceTopic==="all"||(Array.isArray(s.topics)&&s.topics.includes(state.sourceTopic)))
@@ -434,6 +474,19 @@ function render(){
           }catch(error){button.lastElementChild.textContent=friendly(error);button.disabled=false;}
         });
         actions.append(button);
+        if(source.kind==="youtube"&&source.id.startsWith("youtube_user_")){
+          const remove=action("Удалить канал","close",async()=>{
+            if(!window.confirm("Удалить отслеживание канала? Уже сохранённые материалы останутся."))return;
+            remove.disabled=true;
+            try{
+              await api("/api/youtube/channels/remove",{
+                method:"POST",body:JSON.stringify({id:source.id})
+              });
+              state.data=await api("/api/overview");render();
+            }catch(error){remove.lastElementChild.textContent=friendly(error);remove.disabled=false;}
+          },"secondary-button source-remove");
+          actions.append(remove);
+        }
         tile.append(actions);root.append(tile);
       }
     }
