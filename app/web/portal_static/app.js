@@ -14,7 +14,7 @@ const el=(tag,cls,value)=>{
   if(value!==undefined)node.textContent=String(value);
   return node;
 };
-const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,aiCatalog:null,sourceGroup:"all",sourceTopic:"all"};
+const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,aiCatalog:null,accountStatus:null,sourceGroup:"all",sourceTopic:"all"};
 const tg=window.Telegram&&window.Telegram.WebApp;
 const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
@@ -824,13 +824,17 @@ function render(){
     }
     const accounts=el("section","panel account-status");
     accounts.append(el("h2","","Мои подключённые аккаунты"));
-    accounts.append(el("p","","Личный вход в ОСВЕД через Telegram — отдельно от чтения ваших подписок. Для каждого внешнего аккаунта требуется официальное разрешение на чтение и кнопка отзыва доступа. Подключение ещё не реализовано: отображаем реальный статус."));
-    for(const service of ["YouTube","Telegram (личные подписки)","X","Reddit","GitHub"]){
+    accounts.append(el("p","","Личный вход в ОСВЕД через Telegram не даёт доступа к подпискам других сервисов. OAuth-авторизация YouTube и GitHub пока не включена: будет доступна после проверки callback, безопасного хранилища токенов и возможности отзыва разрешений."));
+    for(const [service,key] of [["YouTube","youtube"],["GitHub","github"]]){
       const row=el("div","capability-row");
-      row.append(el("strong","",service),pill("НЕ ПОДКЛЮЧЁН","tag off"));
-      row.append(el("span","","Авторизация и импорт личных подписок появятся после OAuth/API-проверки. Сейчас доступны публичные ссылки через «Источники»."));
+      const item=state.accountStatus?.accounts?.[key];
+      row.append(el("strong","",service),pill(item?.connected?"ПОДКЛЮЧЁН":"НЕ ПОДКЛЮЧЁН",item?.connected?"tag":"tag off"));
+      row.append(el("span","",item?.configuration_present
+        ?"OAuth-приложение настроено. Авторизация пока недоступна до завершения защищённого callback."
+        :"Требуется настройка OAuth-приложения на сервере."));
       accounts.append(row);
     }
+    accounts.append(el("p","","X, Reddit и импорт личных Telegram-подписок — последующие этапы. Пароли и cookies ОСВЕД не запрашивает."));
     $("#section-tools").append(accounts);
     panel.append(el("p","","Источник данных: текущая SQLite ОСВЕД. Оформление — светлая бело-синяя и тёмная серо-синяя темы."));
     const themeButton=action("Сменить тему","moon",()=>{
@@ -1018,6 +1022,8 @@ async function loadDashboard(){
   catch(_){state.capabilities=null;}
   try{state.aiModels=await api("/api/ai/models");}
   catch(_){state.aiModels=null;}
+  try{state.accountStatus=await api("/api/accounts/status");}
+  catch(_){state.accountStatus=null;}
   render();showShell();
 }
 async function refresh(){
