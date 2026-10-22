@@ -6,7 +6,9 @@ plaintext provider access/refresh tokens or emit them to the portal response.
 from __future__ import annotations
 
 import time
+
 from cryptography.fernet import Fernet, InvalidToken
+
 from app.db.repository import Repository
 
 
