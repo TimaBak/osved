@@ -52,7 +52,12 @@ def test_website_add_and_remove_public_youtube_channel(tmp_path):
             indirect = await client.post(add, headers=headers,
                 json={"url": "https://youtube.com/@creator"})
             assert indirect.status == 400
-            assert (await indirect.json())["error"] == "youtube_direct_channel_required"
+            assert (await indirect.json())["error"] == "youtube_resolution_consent_required"
+            agreed = await client.post(add, headers=headers, json={
+                "url":"@creator", "allow_paid_resolution":True
+            })
+            assert agreed.status == 503
+            assert (await agreed.json())["error"] == "youtube_resolver_unconfigured"
             bad = await client.post(add, headers=headers,
                 json={"url": "https://youtube.com.evil.com/channel/" + CHANNEL_ID})
             assert bad.status == 400
