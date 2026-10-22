@@ -38,6 +38,12 @@ from app.web.personalization import (
 from app.web.personalization import (
     initialize as initialize_personalization,
 )
+from app.web.public_sources import (
+    SourceInputError,
+    add as add_public_subscription,
+    initialize as initialize_public_sources,
+    remove as remove_public_subscription,
+)
 from app.web.reader_notes import content_language, get_note, initialize, list_notes, save_note
 from app.web.sessions import (
     SESSION_SECONDS,
@@ -591,6 +597,48 @@ async def remove_youtube_source(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "id": source_id, "removed": True})
 
 
+async def add_public_source(request: web.Request) -> web.Response:
+    """Add a fixed-platform public source to the live collector registry."""
+    state: PortalState = request.app[STATE]
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            return error("invalid_source")
+        kind = data["kind"]
+        locator = data["locator"]
+        topic = data.get("topic", "")
+        if not isinstance(kind, str) or not isinstance(locator, str):
+            return error("invalid_source")
+        result = await asyncio.to_thread(
+            add_public_subscription,
+            state.repository, state.settings, kind, locator, topic,
+        )
+    except SourceInputError as exc:
+        return web.json_response({"error": "invalid_public_source",
+                                  "detail": str(exc)[:180]}, status=400)
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_source")
+    return web.json_response({"ok": True, **result})
+
+
+async def remove_public_source(request: web.Request) -> web.Response:
+    state: PortalState = request.app[STATE]
+    try:
+        data = await request.json()
+        if not isinstance(data, dict) or not isinstance(data.get("id"), str):
+            return error("invalid_source")
+        source_id = data["id"]
+        await asyncio.to_thread(
+            remove_public_subscription, state.repository, state.settings, source_id
+        )
+    except (KeyError, TypeError, ValueError):
+        return error("invalid_source")
+    except SourceInputError as exc:
+        return web.json_response({"error": "invalid_public_source",
+                                  "detail": str(exc)[:180]}, status=400)
+    return web.json_response({"ok": True, "id": source_id, "removed": True})
+
+
 async def source_update(request: web.Request) -> web.Response:
     state: PortalState = request.app[STATE]
     try:
@@ -641,6 +689,7 @@ async def startup(app: web.Application) -> None:
     await asyncio.to_thread(initialize_sessions, state.repository)
     await asyncio.to_thread(initialize, state.repository)
     await asyncio.to_thread(initialize_personalization, state.repository)
+    await asyncio.to_thread(initialize_public_sources, state.repository)
 
 
 def create_portal(settings: Settings, repository: Repository) -> web.Application:
@@ -664,6 +713,8 @@ def create_portal(settings: Settings, repository: Repository) -> web.Application
     app.router.add_get("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/reader/{kind}/{item_id}", reader_item)
     app.router.add_post("/api/source", source_update)
+    app.router.add_post("/api/public-sources/add", add_public_source)
+    app.router.add_post("/api/public-sources/remove", remove_public_source)
     app.router.add_post("/api/youtube/channels/add", add_youtube_source)
     app.router.add_post("/api/youtube/channels/remove", remove_youtube_source)
     app.router.add_get("/", static)
