@@ -90,7 +90,10 @@ def run_first_news_pilot(settings: Settings, repository: Repository) -> dict:
                 )
                 if card_ids:
                     sent = asyncio.run(
-                        send_cards_by_ids(settings, repository, card_ids)
+                        send_cards_by_ids(
+                            settings, repository, card_ids,
+                            delivery_format=settings.delivery_format,
+                        )
                     )
                     outcomes[-1]["delivery_sent"] = sent.get("sent", 0)
                 break
