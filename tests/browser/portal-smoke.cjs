@@ -17,6 +17,12 @@ const { chromium } = require("playwright");
       waitUntil: "domcontentloaded",
       timeout: 20000,
     });
+    const liveAppJs=await page.evaluate(async()=>{
+      const response=await fetch("/app.js?smoke=portal2",{cache:"no-store"});
+      return response.text();
+    });
+    assert.match(liveAppJs,/submit\.addEventListener\("click",addYoutubeChannel\)/,
+      "Live portal is serving a stale app.js instead of the deployed YouTube submit fix");
     await page.locator("#login-state").waitFor({ state: "visible" });
     await page.waitForTimeout(1300);
     assert.equal(await page.locator("#login-code").isVisible(), true);
@@ -238,10 +244,21 @@ const { chromium } = require("playwright");
     }));
     assert.equal(formValid,true,"Invalid YouTube form: "+JSON.stringify(diagnostic));
 
+    await page.locator("#youtube-add-form").evaluate(form=>{
+      window.__youtubeSubmitProbe={clicks:0,submits:0};
+      form.addEventListener("submit",()=>window.__youtubeSubmitProbe.submits++,true);
+      form.querySelector("button[type=submit]")
+        .addEventListener("click",()=>window.__youtubeSubmitProbe.clicks++,true);
+    });
     await page.locator("#youtube-add-form button[type=submit]").click();
     await page.waitForTimeout(1300);
+    const afterClick=await page.evaluate(()=>({
+      probe:window.__youtubeSubmitProbe,
+      status:document.querySelector("#youtube-add-form .source-add-status")?.textContent,
+      disabled:document.querySelector("#youtube-add-form button[type=submit]")?.disabled,
+    }));
     assert.equal(addedChannel,true,
-      "YouTube add request missing: "+JSON.stringify(diagnostic));
+      "YouTube add request missing: "+JSON.stringify({...diagnostic,afterClick}));
     // Check both the API request and the visible source registry entry. A
     // previously failing smoke timed out here without identifying which failed.
 
