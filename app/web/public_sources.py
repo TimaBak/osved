@@ -19,7 +19,7 @@ KINDS = {"github", "reddit"}
 GITHUB_OWNER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 GITHUB_REPO = re.compile(r"[A-Za-z0-9_.-]{1,100}")
 REDDIT_COMMUNITY = re.compile(r"[A-Za-z0-9_]{2,21}")
-MAX_SOURCES = 50
+MAX_SOURCES = 150
 
 
 class SourceInputError(ValueError):
@@ -95,7 +95,7 @@ def add(
                 "SELECT COUNT(*) FROM owner_public_sources WHERE removed_at IS NULL"
             ).fetchone()[0]
             if count >= MAX_SOURCES:
-                raise SourceInputError("Достигнут лимит 50 публичных источников.")
+                raise SourceInputError(f"Достигнут лимит {MAX_SOURCES} публичных источников.")
         db.execute(
             """INSERT INTO owner_public_sources
                (id,kind,locator,title,topic,added_at,removed_at) VALUES(?,?,?,?,?,?,NULL)
