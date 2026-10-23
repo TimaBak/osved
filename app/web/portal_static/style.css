@@ -373,3 +373,32 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
  .dialog-body p,.dialog-body li{font-size:15px;line-height:1.8}
  .dialog-body h3{font-size:18px}
 }
+
+
+/* Article reader V2: intentional reading page, not a centered popup. */
+.reader-full.dialog-overlay{padding:0;background:var(--bg);align-items:stretch}
+.reader-full .dialog{width:100%;max-height:100dvh;height:100dvh;max-width:none;border:0;border-radius:0;padding:0 max(20px,calc((100vw - 900px)/2)) 65px;box-shadow:none;overscroll-behavior:contain}
+.reader-crumb{display:flex;gap:12px;align-items:center;padding:24px 0 18px;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted)}
+.reader-back{border:0;background:transparent;color:var(--primary);font-weight:750;padding:6px 0}
+.reader-back:hover{text-decoration:underline}
+.reader-expand{border:1px solid var(--border-strong);background:var(--surface-alt);border-radius:9px;padding:7px 12px;color:var(--text);font-size:12px;font-weight:700}
+.dialog-head{margin-top:24px}
+.reader-full .dialog h2{max-width:100%;font-size:clamp(27px,4vw,44px);line-height:1.2;letter-spacing:-.035em;margin:18px 0 32px;text-wrap:pretty}
+.editorial-reading{max-width:720px;margin:0 auto 30px}
+.editorial-reading section{margin:0 0 30px}
+.editorial-reading section>h3{font-size:17px;line-height:1.35;color:var(--text);margin:0 0 17px;font-weight:800}
+.editorial-summary{background:var(--surface-alt);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:10px;padding:22px 25px}
+.editorial-summary p{color:var(--text);font-size:17px;line-height:1.7;margin:0;font-weight:510}
+.editorial-facts{padding:5px 0}
+.editorial-rich p{margin:0 0 18px;line-height:1.85;font-size:16px;color:var(--text)}
+.editorial-rich h3,.editorial-rich h4{margin:26px 0 10px}
+.editorial-rich ul,.editorial-rich ol{padding-left:25px}
+.editorial-rich li{margin:9px 0;line-height:1.7;font-size:16px}
+.reader-full .dialog-links{max-width:720px;margin:25px auto 0}
+@media(max-width:740px){
+ .reader-full .dialog{padding:0 18px 48px}
+ .reader-full .dialog h2{font-size:28px}
+ .editorial-summary{padding:17px}
+ .editorial-summary p{font-size:16px}
+ .editorial-rich p,.editorial-rich li{font-size:15px}
+}
