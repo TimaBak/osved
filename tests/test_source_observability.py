@@ -39,9 +39,11 @@ def test_source_collection_uses_runs_not_registry_readiness(tmp_path):
     assert current[first]["status"] == "collected"
     assert current[first]["last_run_seen"] == 3
     assert current[first]["last_run_inserted"] == 2
+    assert current[first]["latest_item_published_at"] is None
     assert current[second]["status"] == "never_checked"
     catalog = {entry["id"]: entry for entry in DashboardStore(settings, repo).sources()}
     assert catalog[first]["collection"]["status"] == "collected"
+    assert "latest_item_published_at" in catalog[first]["collection"]
     assert catalog[second]["collection"]["status"] == "never_checked"
     diag = diagnose(settings.database_path, openrouter_configured=False)
     assert "source_collection" in diag
