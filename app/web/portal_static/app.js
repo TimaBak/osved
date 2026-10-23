@@ -1287,6 +1287,19 @@ async function openArticle(item,kind){
       const rich=el("div","editorial-rich");
       // Server returns sanitized HTML through app.web.content.safe_html.
       rich.innerHTML=snippet;
+      // Existing verified prose only: split overly long plain-text paragraphs
+      // for reading without adding facts, headings, or rewriting citations.
+      for(const paragraph of [...rich.querySelectorAll("p")]){
+        if(paragraph.children.length||paragraph.textContent.length<500)continue;
+        const sentences=paragraph.textContent.match(/[^.!?]+[.!?]+(?:\\s+|$)|[^.!?]+$/gu)||[];
+        if(sentences.length<4)continue;
+        const replacement=document.createDocumentFragment();
+        for(let i=0;i<sentences.length;i+=2){
+          const text=sentences.slice(i,i+2).join("").trim();
+          if(text)replacement.append(el("p","",text));
+        }
+        paragraph.replaceWith(replacement);
+      }
       section.append(rich);
       body.append(section);
     }else if(lead){
