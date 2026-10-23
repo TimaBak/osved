@@ -14,7 +14,7 @@ const el=(tag,cls,value)=>{
   if(value!==undefined)node.textContent=String(value);
   return node;
 };
-const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,aiCatalog:null,accountStatus:null,sourceGroup:"all",sourceTopic:"all"};
+const state={data:null,csrf:"",section:"overview",query:"",videoJob:null,capabilities:null,aiModels:null,aiCatalog:null,accountStatus:null,sourceGroup:"all",sourceTopic:"all",renderRevision:0};
 const tg=window.Telegram&&window.Telegram.WebApp;
 const labels={
   overview:["Информационный обзор","Новости, события, источники и аналитика — всё в одном месте."],
@@ -248,12 +248,13 @@ function card(item,kind){
   ];
   for(const [reaction,label] of options){
     const button=action((reaction===current?"● ":"")+label,null,async()=>{
+      const renderRevision=state.renderRevision;
       button.disabled=true;
       try{
         await api("/api/personalization/feedback",{
           method:"POST",body:JSON.stringify({kind:type,id:item.id,action:reaction})
         });
-        await loadDashboard();
+        await loadDashboard(renderRevision);
       }catch(error){
         const info=el("span","reaction-error",friendly(error));
         buttons.append(info);button.disabled=false;
@@ -284,12 +285,13 @@ function matches(item){
 }
 function filter(items){return items.filter(matches);}
 async function changePriority(topic,delta){
+  const renderRevision=state.renderRevision;
   const next=Math.max(-3,Math.min(3,topic.priority+delta));
   try{
     await api("/api/personalization/topic",{
       method:"POST",body:JSON.stringify({topic:topic.id,priority:next})
     });
-    await loadDashboard();
+    await loadDashboard(renderRevision);
   }catch(error){
     const message=el("div","reaction-error",friendly(error));
     $("#section-tools").append(message);
@@ -418,6 +420,7 @@ function sourceImportPanel(){
 }
 function render(){
   if(!state.data)return;
+  state.renderRevision+=1;
   const {feed,radar,sources,health}=state.data;
   const all=Array.isArray(feed)?feed:[];
   const signals=Array.isArray(radar)?radar:[];
@@ -539,10 +542,11 @@ function render(){
     tools.append(el("p","","Можно сбросить все сохранённые реакции и ручные приоритеты. Избранное и исследовательские заметки сохранятся."));
     const reset=action("Сбросить мои предпочтения","refresh",async()=>{
       if(!window.confirm("Сбросить реакции и приоритеты тем? Избранное и заметки останутся."))return;
+      const renderRevision=state.renderRevision;
       reset.disabled=true;
       try{
         await api("/api/personalization/reset",{method:"POST",body:JSON.stringify({confirm:true})});
-        await loadDashboard();
+        await loadDashboard(renderRevision);
       }catch(error){tools.append(el("p","reaction-error",friendly(error)));reset.disabled=false;}
     },"secondary-button");
     tools.append(reset);$("#section-tools").append(tools);
@@ -1393,7 +1397,7 @@ function buildCover(text){
     '<text x="80" y="92" font-size="24" font-family="sans-serif" font-weight="700" fill="#b8d8ff" letter-spacing="9">OSVED / RESEARCH</text>'+
     '<text x="80" y="612" font-size="23" font-family="sans-serif" fill="#dbeeff" letter-spacing="5">INTELLIGENCE · VISUAL NOTES</text></svg>';
 }
-async function loadDashboard(){
+async function loadDashboard(expectedRenderRevision=null){
   const data=await api("/api/overview");
   if(!data||!Array.isArray(data.feed)||!Array.isArray(data.radar)||!Array.isArray(data.sources)||!data.health){
     throw Error("invalid dashboard payload");
@@ -1405,10 +1409,14 @@ async function loadDashboard(){
   catch(_){state.aiModels=null;}
   try{state.accountStatus=await api("/api/accounts/status");}
   catch(_){state.accountStatus=null;}
-  render();showShell();
+  // An async action from an old view may finish after the owner navigated
+  // elsewhere. Update state, but never replace the newer DOM in that case.
+  if(expectedRenderRevision===null||state.renderRevision===expectedRenderRevision)render();
+  showShell();
 }
 async function refresh(){
-  try{await loadDashboard();}
+  const renderRevision=state.renderRevision;
+  try{await loadDashboard(renderRevision);}
   catch(error){
     if(error.status===401){
       state.csrf="";showAuth("Сессия закончилась. Получи новый код в Telegram.");
