@@ -205,13 +205,13 @@ function card(item,kind){
   const link=external(item.url,"Первоисточник");
   if(link)actions.append(link);
   if(type!=="radar"){
-    const save=action(item.saved?"★ Сохранено":"☆ Сохранить","star",async()=>{
+    const save=action(item.saved?"Сохранено":"Сохранить","star",async()=>{
       save.disabled=true;
       try{
         const next=!item.saved;
         await api("/api/bookmark",{method:"POST",body:JSON.stringify({kind:item.kind,id:item.id,saved:next})});
         item.saved=next;
-        save.lastElementChild.textContent=next?"★ Сохранено":"☆ Сохранить";
+        save.lastElementChild.textContent=next?"Сохранено":"Сохранить";
       }catch(_){save.lastElementChild.textContent="Не удалось сохранить";}
       finally{save.disabled=false;}
     },"secondary-button");
@@ -1287,6 +1287,19 @@ async function openArticle(item,kind){
       const rich=el("div","editorial-rich");
       // Server returns sanitized HTML through app.web.content.safe_html.
       rich.innerHTML=snippet;
+      // Existing verified prose only: split overly long plain-text paragraphs
+      // for reading without adding facts, headings, or rewriting citations.
+      for(const paragraph of [...rich.querySelectorAll("p")]){
+        if(paragraph.children.length||paragraph.textContent.length<500)continue;
+        const sentences=paragraph.textContent.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/gu)||[];
+        if(sentences.length<4)continue;
+        const replacement=document.createDocumentFragment();
+        for(let i=0;i<sentences.length;i+=2){
+          const text=sentences.slice(i,i+2).join("").trim();
+          if(text)replacement.append(el("p","",text));
+        }
+        paragraph.replaceWith(replacement);
+      }
       section.append(rich);
       body.append(section);
     }else if(lead){
