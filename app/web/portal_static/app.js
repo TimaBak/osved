@@ -1312,6 +1312,7 @@ function closeDialog(){
   readerReturnFocus=null;
 }
 $("#dialog-close").addEventListener("click",closeDialog);
+$("#dialog-dismiss").addEventListener("click",closeDialog);
 $("#dialog-expand").addEventListener("click",()=>{
   readerMode(!$("#dialog-overlay").classList.contains("reader-full"));
 });
