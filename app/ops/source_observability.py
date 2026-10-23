@@ -23,7 +23,9 @@ def snapshots(db: sqlite3.Connection) -> dict[str, dict]:
             r.status AS run_status, r.started_at, r.finished_at,
             r.items_seen, r.items_inserted, r.items_rejected,
             r.latency_ms, r.error,
-            (SELECT COUNT(*) FROM source_items i WHERE i.source_id=s.id) AS total_items
+            (SELECT COUNT(*) FROM source_items i WHERE i.source_id=s.id) AS total_items,
+            (SELECT MAX(i.published_at) FROM source_items i WHERE i.source_id=s.id)
+                AS latest_item_published_at
         FROM sources s
         LEFT JOIN runtime_settings override ON override.key='source_enabled:'||s.id
         LEFT JOIN source_health h ON h.source_id=s.id
@@ -72,6 +74,7 @@ def snapshots(db: sqlite3.Connection) -> dict[str, dict]:
             "last_run_inserted": int(row["items_inserted"] or 0),
             "last_run_rejected": int(row["items_rejected"] or 0),
             "total_items": int(row["total_items"]),
+            "latest_item_published_at": row["latest_item_published_at"],
             "consecutive_errors": int(row["consecutive_errors"] or 0),
             "cooldown_until": row["cooldown_until"],
             "last_error": redact_text(str(row["error"] or ""))[:180] or None,
