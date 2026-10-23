@@ -718,6 +718,9 @@ function render(){
         const lastSuccess=source.last_success_at||"не зафиксирован";
         const stats=el("div","source-collection-facts");
         stats.append(el("span","","Последняя попытка: "+lastAttempt));
+        if(observation.latest_item_published_at){
+          stats.append(el("span","","Последняя публикация источника в базе: "+observation.latest_item_published_at));
+        }
         stats.append(el("span","","Последний успешный сбор: "+lastSuccess));
         stats.append(el("span","","Последний запуск: получено "+(observation.last_run_seen||0)+
           ", добавлено новых "+(observation.last_run_inserted||0)+
