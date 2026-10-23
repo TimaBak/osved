@@ -20,13 +20,13 @@ def test_readiness_reports_disabled_schedule_and_missing_card_provider(tmp_path)
 def test_readiness_distinguishes_live_mode_from_observed_news(tmp_path):
     _, repository = setup_schedule(tmp_path)
     configure_schedule(repository, enabled=True, dry_run=True)
-    dry = diagnose(repository.database_path, openrouter_configured=True)
+    dry = diagnose(repository.database_path, openrouter_configured=True, openrouter_opt_in=True)
     assert dry["live_publication_ready"] is False
     assert "schedule_dry_run" in dry["issues"]
     assert "card_provider_unconfigured" not in dry["issues"]
 
     configure_schedule(repository, enabled=True, dry_run=False)
-    live = diagnose(repository.database_path, openrouter_configured=True)
+    live = diagnose(repository.database_path, openrouter_configured=True, openrouter_opt_in=True)
     assert live["live_publication_ready"] is True
     assert "no_valid_cards" in live["issues"]
     assert "no_sent_deliveries" in live["issues"]
