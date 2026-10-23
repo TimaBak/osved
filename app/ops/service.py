@@ -49,8 +49,8 @@ def run_first_news_pilot(settings: Settings, repository: Repository) -> dict:
     """Try up to three new verified events once; never retry after restart."""
     if settings.app_env != "production" or settings.codex_sale_api_key is None:
         return {"status": "not_configured"}
-    from app.telegram_bot.bot import configured_owner_id
     from app.db.card_predicates import finished_card_sql
+    from app.telegram_bot.bot import configured_owner_id
 
     owner = configured_owner_id(settings, repository)
     if owner is None:
