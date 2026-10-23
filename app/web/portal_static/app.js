@@ -1291,7 +1291,7 @@ async function openArticle(item,kind){
       // for reading without adding facts, headings, or rewriting citations.
       for(const paragraph of [...rich.querySelectorAll("p")]){
         if(paragraph.children.length||paragraph.textContent.length<500)continue;
-        const sentences=paragraph.textContent.match(/[^.!?]+[.!?]+(?:\\s+|$)|[^.!?]+$/gu)||[];
+        const sentences=paragraph.textContent.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/gu)||[];
         if(sentences.length<4)continue;
         const replacement=document.createDocumentFragment();
         for(let i=0;i<sentences.length;i+=2){
