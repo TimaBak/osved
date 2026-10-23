@@ -1508,7 +1508,11 @@ class OpenRouterCardGenerator:
         )
         if not known_urls:
             raise CardValidationError("At least one known URL is required")
-        model = model or ("gpt-6-luna" if codex else self.settings.openrouter_model or "google/gemini-2.5-flash-lite")
+        model = model or (
+            "gpt-6-luna"
+            if codex
+            else self.settings.openrouter_model or "google/gemini-2.5-flash-lite"
+        )
         payload = build_request(
             model=model,
             source_name=source_name,
