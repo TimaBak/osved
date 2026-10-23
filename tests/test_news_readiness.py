@@ -34,7 +34,9 @@ def test_readiness_distinguishes_live_mode_from_observed_news(tmp_path):
 def test_codexsale_is_ready_without_openrouter(tmp_path):
     _, repository = setup_schedule(tmp_path)
     configure_schedule(repository, enabled=True, dry_run=False)
-    report = diagnose(repository.database_path, openrouter_configured=False, codexsale_configured=True)
+    report = diagnose(
+        repository.database_path, openrouter_configured=False, codexsale_configured=True
+    )
     assert report["card_provider"] == {"name": "codexsale", "configured": True}
     assert report["live_publication_ready"] is True
 
@@ -43,5 +45,7 @@ def test_openrouter_requires_explicit_opt_in(tmp_path):
     _, repository = setup_schedule(tmp_path)
     report = diagnose(repository.database_path, openrouter_configured=True)
     assert report["card_provider"]["configured"] is False
-    permitted = diagnose(repository.database_path, openrouter_configured=True, openrouter_opt_in=True)
+    permitted = diagnose(
+        repository.database_path, openrouter_configured=True, openrouter_opt_in=True
+    )
     assert permitted["card_provider"]["configured"] is True
