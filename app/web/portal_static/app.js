@@ -1233,8 +1233,14 @@ function render(){
   }
   if(root.children.length===0)note("Ничего не найдено","Попробуй другой поисковый запрос.");
 }
+let readerReturnFocus=null;
+function readerMode(full){
+  $("#dialog-overlay").classList.toggle("reader-full",full);
+  $("#dialog-expand").textContent=full?"Свернуть":"На весь экран";
+  $("#dialog-expand").setAttribute("aria-pressed",String(full));
+}
 function showDialog(item,bodyNode){
-  $("#dialog-label").textContent=item.kind==="radar"?"СИГНАЛ · НЕПРОВЕРЕНО":item.kind==="video"?"МЕДИАЛАБ":"СТАТЬЯ / ПУБЛИКАЦИЯ";
+  $("#dialog-label").textContent=item.kind==="radar"?"СИГНАЛ · НЕПРОВЕРЕНО":item.kind==="video"?"МЕДИАЛАБ":"ПРОВЕРЕННАЯ ПУБЛИКАЦИЯ";
   $("#dialog-title").textContent=item.title||"Материал";
   $("#dialog-body").replaceChildren(bodyNode);
   const links=$("#dialog-links");
@@ -1245,53 +1251,71 @@ function showDialog(item,bodyNode){
     if(url)links.append(url);
   }
   if(!sources.length){
-    const url=external(item.url,"Открыть полный оригинал");
+    const url=external(item.url,"Открыть первоисточник");
     if(url)links.append(url);
   }
   $("#dialog-overlay").hidden=false;
-  $("#dialog-close").focus();
   document.body.style.overflow="hidden";
 }
 async function openArticle(item,kind){
-  const body=el("div","dialog-body");
-  body.append(el("p","","Загружаю материал и ссылки на источники…"));
+  readerReturnFocus=document.activeElement;
+  readerMode(true);
+  const body=el("div","editorial-reading");
+  body.append(el("p","","Загружаю статью…"));
   showDialog(item,body);
+  $("#dialog-close").focus();
   try{
     const url=kind==="radar"?"/api/radar/"+item.id:"/api/article/"+encodeURIComponent(kind)+"/"+item.id;
     const result=await api(url);
+    if($("#dialog-overlay").hidden)return;
     const detail=result.item;
     if(!detail)throw Error("not_found");
     const content=detail.content||{};
-    body.replaceChildren();
     const snippet=content.article||content.context||content.brief||detail.body_html;
-    if(snippet){
-      const rich=el("div","dialog-body");
-      // This HTML is sanitized by app.web.content.safe_html on the server.
-      rich.innerHTML=snippet;
-      body.append(rich);
-    }else{
-      body.append(el("p","",detail.summary||"Полная статья доступна на сайте первоисточника."));
+    body.replaceChildren();
+    const lead=String(detail.summary||"").trim();
+    if(kind==="news"&&lead){
+      const section=el("section","editorial-summary");
+      section.append(el("h3","","Главное"));
+      section.append(el("p","",lead));
+      body.append(section);
     }
-    if(!content.article&&kind==="news"){
-      body.append(el("p","caption","Полная расширенная статья пока не подготовлена. Выше — сохранённый материал ОСВЕД."));
+    if(snippet){
+      const section=el("section","editorial-facts");
+      section.append(el("h3","",kind==="news"?"Что известно":"Материал"));
+      const rich=el("div","editorial-rich");
+      // Server returns sanitized HTML through app.web.content.safe_html.
+      rich.innerHTML=snippet;
+      section.append(rich);
+      body.append(section);
+    }else if(lead){
+      if(kind!=="news")body.append(el("p","",lead));
+    }else{
+      body.append(el("p","","Полный текст недоступен. Открой первоисточник по ссылке ниже."));
     }
     if((detail.language||item.language)==="original"||
        (!containsCyrillic(detail.title)&&!containsCyrillic(detail.summary))){
-      const info=el("p","language-notice",
-        "Материал сохранён на языке первоисточника. Достоверный перевод на русский пока недоступен: ОСВЕД не подменяет его догадками.");
-      body.prepend(info);
+      body.prepend(el("p","language-notice",
+        "Оригинал на другом языке. Проверенный русский перевод пока недоступен."));
     }
     body.append(readingPanel(detail,kind));
     showDialog({...detail,kind},body);
   }catch(error){
-    body.replaceChildren(el("p","",friendly(error)+" Открой исходную публикацию через ссылку на карточке."));
+    body.replaceChildren(el("p","",friendly(error)+" Источник доступен по ссылке ниже."));
   }
 }
 function closeDialog(){
   $("#dialog-overlay").hidden=true;
+  readerMode(false);
   document.body.style.overflow="";
+  if(readerReturnFocus&&readerReturnFocus.isConnected)readerReturnFocus.focus();
+  readerReturnFocus=null;
 }
 $("#dialog-close").addEventListener("click",closeDialog);
+$("#dialog-dismiss").addEventListener("click",closeDialog);
+$("#dialog-expand").addEventListener("click",()=>{
+  readerMode(!$("#dialog-overlay").classList.contains("reader-full"));
+});
 $("#dialog-overlay").addEventListener("click",event=>{
   if(event.target===$("#dialog-overlay"))closeDialog();
 });
