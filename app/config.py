@@ -341,6 +341,7 @@ class Settings(BaseSettings):
             "telegram_reader": self.telegram_api_id is not None
             and self.telegram_api_hash is not None,
             "openrouter": self.openrouter_api_key is not None,
+            "codexsale": self.codex_sale_api_key is not None,
             "monid": self.monid_api_key is not None,
             "allowed_user": self.allowed_user_id is not None,
         }
