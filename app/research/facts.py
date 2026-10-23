@@ -22,8 +22,8 @@ from app.llm.openrouter import (
     OpenRouterNotConfigured,
     OpenRouterResponseError,
     Transport,
-    http_transport,
     codexsale_transport,
+    http_transport,
     known_organizations,
     material_hook_stems,
 )
@@ -1435,7 +1435,11 @@ class OpenRouterFactSheetGenerator:
         if key is None:
             raise OpenRouterNotConfigured("CODEX_SALE_API_KEY is required for fact extraction")
         payload = build_fact_sheet_request(model=model, event=event, documents=documents)
-        transport = codexsale_transport if codex and self.transport is http_transport else self.transport
+        transport = (
+            codexsale_transport
+            if codex and self.transport is http_transport
+            else self.transport
+        )
         response = transport(payload, key.get_secret_value())
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
