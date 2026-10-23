@@ -16,15 +16,18 @@ from app.collectors.ingest import redact_text, sanitize_payload
 from app.config import Settings
 from app.db.repository import Repository
 from app.llm.accounting import nonnegative_int, resolve_usage_cost
+from app.llm.model_registry import TASK_DEFAULTS
 from app.llm.openrouter import (
     HOOK_ACTION_PATTERNS,
     OpenRouterNotConfigured,
     OpenRouterResponseError,
     Transport,
+    codexsale_transport,
     http_transport,
     known_organizations,
     material_hook_stems,
 )
+from app.llm.routing_policy import fallback_permitted, resolve_selection
 from app.ops.budget import evaluate_budget
 from app.pipeline.numbers import extract_numeric_values
 from app.research.evidence_guards import (
@@ -1427,17 +1430,27 @@ class OpenRouterFactSheetGenerator:
         documents: list[dict[str, Any]],
         model: str,
     ) -> FactSheetGeneration:
-        if self.settings.openrouter_api_key is None:
-            raise OpenRouterNotConfigured("OPENROUTER_API_KEY is required")
+        codex = self.settings.codex_sale_api_key is not None
+        key = self.settings.codex_sale_api_key if codex else self.settings.openrouter_api_key
+        if key is None:
+            raise OpenRouterNotConfigured("CODEX_SALE_API_KEY is required for fact extraction")
         payload = build_fact_sheet_request(model=model, event=event, documents=documents)
-        response = self.transport(
-            payload,
-            self.settings.openrouter_api_key.get_secret_value(),
+        transport = (
+            codexsale_transport
+            if codex and self.transport is http_transport
+            else self.transport
         )
+        response = transport(payload, key.get_secret_value())
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
         response_id = str(response["id"]) if response.get("id") else None
-        accounting = resolve_usage_cost(usage, model=response_model)
+        accounting = (
+            resolve_usage_cost(
+                {"cost": usage["cost"], "is_byok": False}
+                if isinstance(usage.get("cost"), (int, float)) else {},
+            )
+            if codex else resolve_usage_cost(usage, model=response_model)
+        )
         billing_metadata = accounting.metadata()
         # Keep the returned draft before compaction/sanitization: rejection must
         # be auditable without paying to reproduce a model's discarded answer.
@@ -1497,7 +1510,15 @@ class OpenRouterFactSheetGenerator:
         )
 
 
-def fact_sheet_models(settings: Settings) -> list[str]:
+def fact_sheet_models(
+    settings: Settings, repository: Repository | None = None
+) -> list[str]:
+    if settings.codex_sale_api_key is not None:
+        selected = (
+            resolve_selection(repository, task="research").model
+            if repository else TASK_DEFAULTS["research"]
+        )
+        return [selected]
     models: list[str] = []
     for model in [settings.openrouter_model, settings.openrouter_fallback_model]:
         if model and model not in models:
@@ -1537,7 +1558,7 @@ def build_event_fact_sheet(
         json.dumps(
             {
                 "policy": fact_policy_metadata(),
-                "models": fact_sheet_models(settings),
+                "models": fact_sheet_models(settings, repository),
                 "headline": event.get("headline"),
                 "documents": [
                     (
@@ -1563,11 +1584,22 @@ def build_event_fact_sheet(
             "llm_skipped": True,
         }
     generator = generator or OpenRouterFactSheetGenerator(settings)
+    if (
+        settings.codex_sale_api_key is None
+        and generator.__class__ is OpenRouterFactSheetGenerator
+        and not fallback_permitted(repository)
+    ):
+        return {
+            "event_id": event_id,
+            "status": "provider_not_configured",
+            "cost_usd": 0.0,
+            "errors": ["Codex Sale required; OpenRouter not opted in"],
+        }
     expires_at = (datetime.now(UTC) + timedelta(days=30)).isoformat()
     attempt_errors: list[str] = []
     total_cost = 0.0
 
-    for attempt, model in enumerate(fact_sheet_models(settings), start=1):
+    for attempt, model in enumerate(fact_sheet_models(settings, repository), start=1):
         budget = evaluate_budget(
             repository.current_month_cost(),
             settings.budget_warning_usd,
@@ -1589,7 +1621,7 @@ def build_event_fact_sheet(
             dropped_fact_count = len(deduplicated_draft.facts) - len(draft.facts)
             errors = validate_fact_sheet(draft, documents)
             repository.record_usage(
-                "openrouter",
+                "codexsale" if settings.codex_sale_api_key else "openrouter",
                 "research.fact_sheet" if not errors else "research.fact_sheet.invalid",
                 cost_usd=result.cost_usd,
                 input_units=result.prompt_tokens,
@@ -1668,7 +1700,7 @@ def build_event_fact_sheet(
         except OpenRouterResponseError as exc:
             total_cost += exc.cost_usd
             repository.record_usage(
-                "openrouter",
+                "codexsale" if settings.codex_sale_api_key else "openrouter",
                 "research.fact_sheet.invalid_response",
                 cost_usd=exc.cost_usd,
                 input_units=exc.prompt_tokens,
