@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import Settings
 from app.llm.accounting import nonnegative_int, resolve_usage_cost
+from app.llm.codexsale import CodexSaleClient
 from app.pipeline.editorial import ORGANIZATION_PATTERNS
 from app.pipeline.numbers import extract_numeric_values
 from app.pipeline.telegram_style import NEWS_STYLE_INSTRUCTION
@@ -1463,6 +1464,16 @@ def build_repair_message(context: dict[str, Any], *, api_key: str = "") -> str:
     )
 
 
+def codexsale_transport(payload: dict[str, Any], api_key: str) -> dict[str, Any]:
+    """Use the approved Codex Sale origin; never forward OpenRouter-specific fields."""
+    outgoing = {k: v for k, v in payload.items() if k != "provider"}
+    return CodexSaleClient(api_key).chat(
+        model=outgoing.pop("model"),
+        messages=outgoing.pop("messages"),
+        **outgoing,
+    )
+
+
 class OpenRouterCardGenerator:
     def __init__(
         self,
@@ -1487,11 +1498,21 @@ class OpenRouterCardGenerator:
         model: str | None = None,
         repair_context: dict[str, Any] | None = None,
     ) -> OpenRouterResult:
-        if self.settings.openrouter_api_key is None:
-            raise OpenRouterNotConfigured("OPENROUTER_API_KEY is required")
+        codex = self.settings.codex_sale_api_key is not None
+        api_key = self.settings.codex_sale_api_key if codex else self.settings.openrouter_api_key
+        if api_key is None:
+            raise OpenRouterNotConfigured("CODEX_SALE_API_KEY is required for news generation")
+        transport = (
+            codexsale_transport if codex and self.transport is http_transport
+            else self.transport
+        )
         if not known_urls:
             raise CardValidationError("At least one known URL is required")
-        model = model or self.settings.openrouter_model or "google/gemini-2.5-flash-lite"
+        model = model or (
+            "gpt-6-luna"
+            if codex
+            else self.settings.openrouter_model or "google/gemini-2.5-flash-lite"
+        )
         payload = build_request(
             model=model,
             source_name=source_name,
@@ -1509,18 +1530,23 @@ class OpenRouterCardGenerator:
                     "role": "user",
                     "content": build_repair_message(
                         repair_context,
-                        api_key=self.settings.openrouter_api_key.get_secret_value(),
+                        api_key=api_key.get_secret_value(),
                     ),
                 }
             )
-        response = self.transport(
-            payload,
-            self.settings.openrouter_api_key.get_secret_value(),
-        )
+        response = transport(payload, api_key.get_secret_value())
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         response_model = str(response.get("model") or model)
         response_id = str(response["id"]) if response.get("id") else None
-        accounting = resolve_usage_cost(usage, model=response_model)
+        # Codex Sale multipliers are not USD prices. Record only an explicit
+        # provider receipt; otherwise mark cost unavailable instead of guessing.
+        accounting = (
+            resolve_usage_cost(
+                {"cost": usage.get("cost"), "is_byok": False}
+                if isinstance(usage.get("cost"), (int, float)) else {},
+            )
+            if codex else resolve_usage_cost(usage, model=response_model)
+        )
         try:
             content = response["choices"][0]["message"]["content"]
             raw_payload = compact_generated_card_payload(json.loads(content))

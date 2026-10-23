@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from app.config import Settings
 from app.db.repository import Repository
+from app.llm.model_registry import TASK_DEFAULTS
 from app.llm.openrouter import (
     PROMPT_VERSION,
     CardDraft,
@@ -17,6 +18,7 @@ from app.llm.openrouter import (
     resolve_verified_headline,
     validate_grounding,
 )
+from app.llm.routing_policy import fallback_permitted, resolve_selection
 from app.ops.budget import evaluate_budget
 from app.pipeline.media import MEDIA_POLICY_VERSION, select_preview_first_media
 from app.pipeline.ranking import rank_event_candidates
@@ -37,7 +39,13 @@ class ResolvedAnchor:
     url: str
 
 
-def generation_models(settings: Settings) -> list[str]:
+def generation_models(settings: Settings, repository: Repository | None = None) -> list[str]:
+    if settings.codex_sale_api_key is not None:
+        selected = (
+            resolve_selection(repository, task="news").model
+            if repository else TASK_DEFAULTS["news"]
+        )
+        return [selected]
     candidates = [
         settings.openrouter_card_model or settings.openrouter_fallback_model,
         settings.openrouter_model or "google/gemini-2.5-flash-lite",
@@ -424,6 +432,13 @@ def generate_cards(
         )
     )
     generator = generator or OpenRouterCardGenerator(settings)
+    # An OpenRouter key is never implicit permission to pay for generation.
+    if (
+        settings.codex_sale_api_key is None
+        and generator.__class__ is OpenRouterCardGenerator
+        and not fallback_permitted(repository)
+    ):
+        return GenerationStats(events_seen=len(events), errors=0)
     created = errors = 0
     total_cost = 0.0
 
@@ -456,7 +471,9 @@ def generate_cards(
         attempt_errors: list[str] = []
         event_cost = 0.0
         card_created = False
-        models = generation_models(settings)[:2]
+        models = generation_models(
+            settings, repository if settings.codex_sale_api_key else None
+        )[:2]
         single_model = len(models) == 1
         if single_model:
             models.append(models[0])
@@ -555,7 +572,7 @@ def generate_cards(
                     )
 
                 repository.record_usage(
-                    "openrouter",
+                    "codexsale" if settings.codex_sale_api_key else "openrouter",
                     "card.generate",
                     cost_usd=result.cost_usd,
                     input_units=result.prompt_tokens,
@@ -615,7 +632,7 @@ def generate_cards(
                 break
             except OpenRouterResponseError as exc:
                 repository.record_usage(
-                    "openrouter",
+                    "codexsale" if settings.codex_sale_api_key else "openrouter",
                     "card.generate.invalid_response",
                     cost_usd=exc.cost_usd,
                     input_units=exc.prompt_tokens,

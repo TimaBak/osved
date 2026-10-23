@@ -18,6 +18,8 @@ def diagnose(
     database: Path,
     *,
     openrouter_configured: bool | None = None,
+    codexsale_configured: bool | None = None,
+    openrouter_opt_in: bool = False,
     portal_reachable: bool | None = None,
 ) -> dict:
     # URI mode=ro prevents this command from modifying production data.
@@ -69,7 +71,10 @@ def diagnose(
             )
         ]
         issues: list[str] = []
-        if openrouter_configured is False:
+        provider_name = "codexsale" if codexsale_configured else "openrouter"
+        provider_ready = (codexsale_configured is True or
+                          (openrouter_configured is True and openrouter_opt_in))
+        if not provider_ready:
             issues.append("card_provider_unconfigured")
         if settings.get("schedule_enabled") != "true":
             issues.append("schedule_disabled")
@@ -99,13 +104,13 @@ def diagnose(
                 "public_https_verified": False,
             },
             "card_provider": {
-                "name": "openrouter",
-                "configured": openrouter_configured,
+                "name": provider_name,
+                "configured": provider_ready,
             },
             "live_publication_ready": (
                 settings.get("schedule_enabled") == "true"
                 and settings.get("schedule_dry_run") == "false"
-                and openrouter_configured is True
+                and provider_ready
             ),
             "counts": counts,
             "issues": issues,
@@ -139,12 +144,23 @@ def main() -> None:
     # of the provider actually used by the existing generation pipeline.
     from app.config import Settings
 
-    configured = Settings().openrouter_api_key is not None
+    settings = Settings()
+    configured = settings.openrouter_api_key is not None
+    codex_configured = settings.codex_sale_api_key is not None
+    # Diagnose fallback preference via read-only SQLite, not by opening a
+    # mutable repository. Query the runtime setting directly.
+    with sqlite3.connect(args.db.resolve().as_uri() + "?mode=ro", uri=True) as db:
+        row = db.execute(
+            "SELECT value FROM runtime_settings WHERE key='ai.routing.openrouter.opt_in'"
+        ).fetchone()
+        opt_in = bool(row and row[0] == "true")
     print(
         json.dumps(
             diagnose(
                 args.db,
                 openrouter_configured=configured,
+                codexsale_configured=codex_configured,
+                openrouter_opt_in=opt_in,
                 portal_reachable=portal_health(),
             ),
             ensure_ascii=False,
