@@ -228,9 +228,6 @@ const { chromium } = require("playwright");
     await page.locator("#source-topic").selectOption("all");
     await page.locator("#youtube-channel-url").fill(
       "https://www.youtube.com/channel/UCaaaaaaaaaaaaaaaaaaaaaa");
-    await page.locator("#youtube-add-form button[type=submit]").click();
-    // Check both the API request and the visible source registry entry. A
-    // previously failing smoke timed out here without identifying which failed.
     const formValid=await page.locator("#youtube-add-form").evaluate(el=>el.checkValidity());
     const diagnostic=await page.locator("#youtube-add-form").evaluate(el=>({
       valid:el.checkValidity(),
@@ -240,9 +237,14 @@ const { chromium } = require("playwright");
       })),
     }));
     assert.equal(formValid,true,"Invalid YouTube form: "+JSON.stringify(diagnostic));
+
+    await page.locator("#youtube-add-form button[type=submit]").click();
     await page.waitForTimeout(1300);
     assert.equal(addedChannel,true,
       "YouTube add request missing: "+JSON.stringify(diagnostic));
+    // Check both the API request and the visible source registry entry. A
+    // previously failing smoke timed out here without identifying which failed.
+
     const youtubeHeading=page.locator("#content .source-tile h2")
       .filter({hasText:"Демонстрационный канал"}).first();
     try{
