@@ -1254,7 +1254,12 @@ async def static(request: web.Request) -> web.Response:
     filename = request.match_info.get("filename", "index.html") or "index.html"
     if filename not in {"index.html", "style.css", "app.js"}:
         return error("not_found", 404)
-    return web.FileResponse(STATIC / filename)
+    response = web.FileResponse(STATIC / filename)
+    # The portal is deployed as one reviewed artifact. Revalidate static files so
+    # a proxy/browser cannot keep an old app.js after the backend has moved to a
+    # new exact SHA.
+    response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    return response
 
 
 async def startup(app: web.Application) -> None:
