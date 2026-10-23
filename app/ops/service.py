@@ -46,44 +46,72 @@ async def resume_waiting_reader(settings: Settings, repository: Repository) -> N
 
 
 def run_first_news_pilot(settings: Settings, repository: Repository) -> dict:
-    """Try one actual, sourced news event once; never auto-repeat paid operations."""
+    """Try up to three new verified events once; never retry after restart."""
     if settings.app_env != "production" or settings.codex_sale_api_key is None:
         return {"status": "not_configured"}
+    from app.db.card_predicates import finished_card_sql
     from app.telegram_bot.bot import configured_owner_id
 
-    if configured_owner_id(settings, repository) is None:
+    owner = configured_owner_id(settings, repository)
+    if owner is None:
         return {"status": "owner_not_configured"}
-    from app.db.card_predicates import finished_card_sql
-
     with repository.connection() as connection:
         if connection.execute(
             f"SELECT 1 FROM cards WHERE {finished_card_sql()} LIMIT 1"
         ).fetchone():
             return {"status": "existing_card"}
-    candidates = fresh_research_events(repository, now=datetime.now(UTC), limit=1)
+    candidates = fresh_research_events(repository, now=datetime.now(UTC), limit=10)
     if not candidates:
         return {"status": "no_recent_evidence"}
-    if not claim_runtime_window(repository, "first_news_pilot_v1", now=datetime.now(UTC)):
+    key = "first_news_pilot_v2"
+    if not claim_runtime_window(repository, key, now=datetime.now(UTC)):
         return {"status": "already_attempted"}
-    event_id = int(candidates[0]["id"])
+    start_cost = repository.current_month_cost()
+    outcomes = []
     try:
         executor = ScheduledJobExecutor(settings, repository)
-        outcome = executor.research_event(candidates[0])
-        if outcome.get("cards_created"):
-            sent = executor.delivery(limit=1)
-            outcome["pilot_delivery"] = {
-                "sent": sent.get("news_sent", 0), "status": sent.get("status")
-            }
+        for event in candidates[:3]:
+            if repository.current_month_cost() - start_cost >= 0.03:
+                break
+            result = executor.research_event(event)
+            outcomes.append({
+                "event_id": int(event["id"]),
+                "cards_created": result.get("cards_created", 0),
+                "fact_sheet": result.get("fact_sheet", {}).get("status"),
+                "errors": result.get("errors", 0),
+                "research": result.get("research", {}).get("status"),
+            })
+            if result.get("cards_created"):
+                from app.ops.schedule import fresh_delivery_card_ids
+                from app.telegram_bot.bot import send_cards_by_ids
+
+                card_ids = fresh_delivery_card_ids(
+                    repository, owner_id=owner, now=datetime.now(UTC), limit=1
+                )
+                if card_ids:
+                    sent = asyncio.run(
+                        send_cards_by_ids(
+                            settings, repository, card_ids,
+                            delivery_format=settings.delivery_format,
+                        )
+                    )
+                    outcomes[-1]["delivery_sent"] = sent.get("sent", 0)
+                break
+        result = {
+            "attempts": outcomes,
+            "cards_created": sum(item["cards_created"] for item in outcomes),
+            "cost_usd_observed": max(0.0, repository.current_month_cost() - start_cost),
+        }
         repository.set_runtime_setting(
-            "first_news_pilot_result_v1",
-            json.dumps(outcome, ensure_ascii=False, default=str)[:6000],
+            "first_news_pilot_result_v2",
+            json.dumps(result, ensure_ascii=False)[:5000],
         )
-        return {"status": "attempted", "event_id": event_id,
-                "cards_created": outcome.get("cards_created", 0)}
+        return result
     except Exception as exc:
         repository.set_runtime_setting(
-            "first_news_pilot_result_v1",
-            json.dumps({"status": "failed", "error": redact_text(str(exc))[:300]}),
+            "first_news_pilot_result_v2",
+            json.dumps({"attempts": outcomes, "status": "failed",
+                        "error": redact_text(str(exc))[:300]}),
         )
         raise
 

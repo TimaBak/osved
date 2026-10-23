@@ -34,10 +34,13 @@ def diagnose(
             for row in connection.execute(
                 "SELECT key, value FROM runtime_settings WHERE key IN "
                 "('schedule_enabled','schedule_dry_run','service_last_tick',"
-                "'first_news_pilot_result_v1','first_news_pilot_v1')"
+                "'first_news_pilot_result_v1','first_news_pilot_v1',"
+                "'first_news_pilot_result_v2','first_news_pilot_v2')"
             )
         }
-        pilot_result = settings.get("first_news_pilot_result_v1")
+        pilot_result = settings.get("first_news_pilot_result_v2") or settings.get(
+            "first_news_pilot_result_v1"
+        )
         counts = {
             "source_items": scalar("SELECT COUNT(*) FROM source_items"),
             "candidate_events": scalar(
@@ -116,7 +119,9 @@ def diagnose(
             ),
             "counts": counts,
             "first_news_pilot": {
-                "attempted": "first_news_pilot_v1" in settings,
+                "attempted": (
+                    "first_news_pilot_v2" in settings or "first_news_pilot_v1" in settings
+                ),
                 "result": json.loads(pilot_result) if pilot_result else None,
             },
             "issues": issues,
