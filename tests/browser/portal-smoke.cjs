@@ -231,9 +231,18 @@ const { chromium } = require("playwright");
     await page.locator("#youtube-add-form button[type=submit]").click();
     // Check both the API request and the visible source registry entry. A
     // previously failing smoke timed out here without identifying which failed.
-    await page.waitForTimeout(250);
+    const formValid=await page.locator("#youtube-add-form").evaluate(el=>el.checkValidity());
+    const diagnostic=await page.locator("#youtube-add-form").evaluate(el=>({
+      valid:el.checkValidity(),
+      message:el.querySelector(".source-add-status")?.textContent,
+      values:Array.from(el.elements).map(e=>({
+        id:e.id,valid:e.checkValidity(),disabled:e.disabled,
+      })),
+    }));
+    assert.equal(formValid,true,"Invalid YouTube form: "+JSON.stringify(diagnostic));
+    await page.waitForTimeout(1300);
     assert.equal(addedChannel,true,
-      "YouTube add form did not send the expected request");
+      "YouTube add request missing: "+JSON.stringify(diagnostic));
     const youtubeHeading=page.locator("#content .source-tile h2")
       .filter({hasText:"Демонстрационный канал"}).first();
     try{
