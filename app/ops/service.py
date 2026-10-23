@@ -11,7 +11,12 @@ from app.collectors.ingest import redact_text
 from app.config import Settings
 from app.db.repository import Repository
 from app.ops.feed_health import feed_health
-from app.ops.schedule import run_schedule_tick
+from app.ops.schedule import (
+    ScheduledJobExecutor,
+    claim_runtime_window,
+    fresh_research_events,
+    run_schedule_tick,
+)
 from app.telegram_bot.bot import run_bot
 
 logger = logging.getLogger(__name__)
@@ -39,7 +44,56 @@ async def resume_waiting_reader(settings: Settings, repository: Repository) -> N
         )
 
 
+
+def run_first_news_pilot(settings: Settings, repository: Repository) -> dict:
+    """Try one actual, sourced news event once; never auto-repeat paid operations."""
+    if settings.app_env != "production" or settings.codex_sale_api_key is None:
+        return {"status": "not_configured"}
+    from app.telegram_bot.bot import configured_owner_id
+
+    if configured_owner_id(settings, repository) is None:
+        return {"status": "owner_not_configured"}
+    from app.db.card_predicates import finished_card_sql
+
+    with repository.connection() as connection:
+        if connection.execute(
+            f"SELECT 1 FROM cards WHERE {finished_card_sql()} LIMIT 1"
+        ).fetchone():
+            return {"status": "existing_card"}
+    candidates = fresh_research_events(repository, now=datetime.now(UTC), limit=1)
+    if not candidates:
+        return {"status": "no_recent_evidence"}
+    if not claim_runtime_window(repository, "first_news_pilot_v1", now=datetime.now(UTC)):
+        return {"status": "already_attempted"}
+    event_id = int(candidates[0]["id"])
+    try:
+        executor = ScheduledJobExecutor(settings, repository)
+        outcome = executor.research_event(candidates[0])
+        if outcome.get("cards_created"):
+            sent = executor.delivery(limit=1)
+            outcome["pilot_delivery"] = {
+                "sent": sent.get("news_sent", 0), "status": sent.get("status")
+            }
+        repository.set_runtime_setting(
+            "first_news_pilot_result_v1",
+            json.dumps(outcome, ensure_ascii=False, default=str)[:6000],
+        )
+        return {"status": "attempted", "event_id": event_id,
+                "cards_created": outcome.get("cards_created", 0)}
+    except Exception as exc:
+        repository.set_runtime_setting(
+            "first_news_pilot_result_v1",
+            json.dumps({"status": "failed", "error": redact_text(str(exc))[:300]}),
+        )
+        raise
+
+
 async def schedule_worker(settings: Settings, repository: Repository) -> None:
+    try:
+        outcome = await asyncio.to_thread(run_first_news_pilot, settings, repository)
+        logger.info("First news pilot: %s", outcome)
+    except Exception as exc:
+        logger.error("First news pilot failed: %s", redact_text(str(exc))[:300])
     while True:
         try:
             await asyncio.to_thread(run_schedule_tick, settings, repository)
