@@ -592,8 +592,14 @@ function render(){
     const submit=el("button","primary-button","Добавить канал");submit.type="submit";
     const addStatus=el("p","source-add-status");addStatus.setAttribute("role","status");
     addForm.append(label,input,resolveLabel,submit,addStatus);
-    addForm.addEventListener("submit",async event=>{
-      event.preventDefault();submit.disabled=true;addStatus.textContent="Проверяю публичную ленту…";
+    let addingYoutube=false;
+    async function addYoutubeChannel(event){
+      if(event)event.preventDefault();
+      if(addingYoutube)return;
+      // A direct button click is handled explicitly for mobile Chromium, so
+      // preserve native form validation before starting the API request.
+      if(!addForm.reportValidity())return;
+      addingYoutube=true;submit.disabled=true;addStatus.textContent="Проверяю публичную ленту…";
       try{
         const outcome=await api("/api/youtube/channels/add",{
           method:"POST",body:JSON.stringify({url:input.value.trim(),allow_paid_resolution:resolveInput.checked})
@@ -610,9 +616,11 @@ function render(){
       }catch(error){
         addStatus.textContent=friendly(error);
         if(error.payload?.detail)addStatus.textContent+=" "+error.payload.detail;
-        submit.disabled=false;
+        addingYoutube=false;submit.disabled=false;
       }
-    });
+    }
+    addForm.addEventListener("submit",addYoutubeChannel);
+    submit.addEventListener("click",addYoutubeChannel);
     addPanel.append(addForm);
     const hint=el("p","caption source-account-help",
       "Личный аккаунт X, Reddit или YouTube пока нельзя авторизовать здесь. Для чтения ваших подписок нужен официальный OAuth, отдельное согласие и возможность отозвать доступ. Это следующий этап, а не работающая кнопка.");
