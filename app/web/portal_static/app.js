@@ -205,13 +205,13 @@ function card(item,kind){
   const link=external(item.url,"Первоисточник");
   if(link)actions.append(link);
   if(type!=="radar"){
-    const save=action(item.saved?"★ Сохранено":"☆ Сохранить","star",async()=>{
+    const save=action(item.saved?"Сохранено":"Сохранить","star",async()=>{
       save.disabled=true;
       try{
         const next=!item.saved;
         await api("/api/bookmark",{method:"POST",body:JSON.stringify({kind:item.kind,id:item.id,saved:next})});
         item.saved=next;
-        save.lastElementChild.textContent=next?"★ Сохранено":"☆ Сохранить";
+        save.lastElementChild.textContent=next?"Сохранено":"Сохранить";
       }catch(_){save.lastElementChild.textContent="Не удалось сохранить";}
       finally{save.disabled=false;}
     },"secondary-button");
