@@ -1236,7 +1236,8 @@ function render(){
 let readerReturnFocus=null;
 function readerMode(full){
   $("#dialog-overlay").classList.toggle("reader-full",full);
-  $("#dialog-expand").textContent=full?"Свернуть":"На весь экран";
+  $("#dialog-expand").textContent=full?"Свернуть окно":"На весь экран";
+  $("#dialog-expand").title=full?"Компактный режим чтения":"Полноэкранный режим чтения";
   $("#dialog-expand").setAttribute("aria-pressed",String(full));
 }
 function showDialog(item,bodyNode){

@@ -402,3 +402,26 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
  .editorial-summary p{font-size:16px}
  .editorial-rich p,.editorial-rich li{font-size:15px}
 }
+
+
+/* Reader V3: same editorial column in dialog and fullscreen modes. */
+.dialog{--reader-column:720px}
+.dialog-head,.dialog>h2,.dialog>.reader-crumb,.dialog>#dialog-body,.dialog>.dialog-links{width:100%;max-width:var(--reader-column);margin-left:auto;margin-right:auto}
+.dialog>h2{max-width:var(--reader-column);margin-top:18px;margin-bottom:28px}
+.dialog #dialog-body .editorial-reading{width:100%;max-width:none;margin:0}
+.dialog .editorial-summary,.dialog .editorial-facts{box-sizing:border-box;width:100%;max-width:none}
+.dialog .editorial-summary{padding:22px 24px}
+.dialog .editorial-facts{padding-left:0;padding-right:0}
+.dialog .editorial-summary h3,.dialog .editorial-facts h3{margin-top:0}
+.dialog .reader-crumb{padding-top:18px}
+.dialog .dialog-head{margin-top:15px}
+.dialog .reader-expand{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:135px}
+.dialog .reader-expand::before{content:"⤢";font-size:18px;line-height:1}
+.reader-full .dialog .reader-expand::before{content:"⤡"}
+.reader-full .dialog>h2{max-width:var(--reader-column)}
+.reader-full .dialog{padding-left:24px;padding-right:24px}
+@media(max-width:740px){
+ .dialog .editorial-summary{padding:18px}
+ .dialog .reader-expand{min-width:115px}
+ .reader-full .dialog{padding-left:18px;padding-right:18px}
+}
