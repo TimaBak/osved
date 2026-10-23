@@ -349,3 +349,27 @@ footer{font-size:11px;color:var(--muted-low);border-top:1px solid var(--border);
   background:var(--primary-soft);border:1px solid var(--border-strong);
   padding:10px 12px;border-radius:10px;color:var(--text)!important;
   font-size:12px!important}
+
+
+/* OSVED Editorial Design V1 — consistent reading rhythm across news articles. */
+.dialog{width:min(850px,100%)}
+.dialog h2{max-width:23ch;line-height:1.18;letter-spacing:-.035em;text-wrap:balance}
+.dialog #dialog-label{letter-spacing:.11em;font-weight:760}
+.dialog-body{max-width:69ch;margin-inline:auto}
+.dialog-body .dialog-body{max-width:none}
+.dialog-body p{font-size:15px;line-height:1.85;margin:0 0 1.1em}
+.dialog-body p+p{margin-top:.85em}
+.dialog-body h3,.dialog-body h4{color:var(--text);line-height:1.35;letter-spacing:-.015em;margin:1.8em 0 .65em}
+.dialog-body h3{font-size:19px}
+.dialog-body h4{font-size:16px}
+.dialog-body ul,.dialog-body ol{padding-left:1.5em;margin:1em 0 1.4em}
+.dialog-body li{font-size:15px;line-height:1.75;margin:.45em 0;padding-left:.3em}
+.dialog-body blockquote{margin:1.45em 0;padding:10px 18px;background:var(--surface-alt);border-radius:0 10px 10px 0}
+.dialog-body a{overflow-wrap:anywhere;text-underline-offset:3px}
+.dialog-body strong{font-weight:720}
+.dialog-links{padding-top:18px;border-top:1px solid var(--border)}
+@media(max-width:740px){
+ .dialog h2{max-width:none;font-size:25px}
+ .dialog-body p,.dialog-body li{font-size:15px;line-height:1.8}
+ .dialog-body h3{font-size:18px}
+}
