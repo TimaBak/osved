@@ -689,7 +689,8 @@ function render(){
         tile.append(el("div","kicker",source.platform||source.kind||"Источник"));
         tile.append(el("h2","",source.name||source.id));
         const tags=el("div","source-tags");
-        tags.append(pill(source.enabled?"ВКЛЮЧЁН":"ПАУЗА",source.enabled?"tag":"tag off"));
+        const enabledTag=pill(source.enabled?"ВКЛЮЧЁН":"ПАУЗА",source.enabled?"tag":"tag off");
+        tags.append(enabledTag);
         const observation=source.collection||{};
         const collectionState=observation.status||"never_checked";
         const collectionLabels={
@@ -733,7 +734,14 @@ function render(){
             const result=await api("/api/source",{
               method:"POST",body:JSON.stringify({id:source.id,enabled:!source.enabled})
             });
-            source.enabled=result.enabled;render();
+            // Toggling one source must not rebuild the whole Sources section:
+            // a late network response would otherwise replace forms while the
+            // owner is typing into them (and can swallow the next click).
+            source.enabled=Boolean(result.enabled);
+            enabledTag.textContent=source.enabled?"ВКЛЮЧЁН":"ПАУЗА";
+            enabledTag.className=source.enabled?"tag":"tag off";
+            button.lastElementChild.textContent=source.enabled?"Приостановить":"Включить";
+            button.disabled=false;
           }catch(error){button.lastElementChild.textContent=friendly(error);button.disabled=false;}
         });
         actions.append(button);
